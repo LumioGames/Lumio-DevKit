@@ -66,6 +66,8 @@ def install(source, data, target, dry_run=False):
     if exists(current) and (not current.is_symlink() or current.resolve().parent != releases
                             or not state_path.exists()):
         raise ValueError(f'install conflict: unmanaged payload {current}')
+    if current.is_symlink() and digest(current.resolve()) != state.get('digest'):
+        raise ValueError('current installed payload was modified; preserve your edits before updating')
     # All registered target roots share this payload; preflight before switching it.
     for root_name, old_names in targets.items():
         folder = Path(root_name)

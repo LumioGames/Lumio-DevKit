@@ -49,9 +49,9 @@
 
 仓库公开名称改为 `LumioGames/Lumio-DevKit`；插件与 marketplace 标识保持 `lumio-devkit`。插件本体移入 `plugin/`，技能内容保留，根目录只负责开发与分发。
 
-- `plugins` CLI 1.3.4 本地 `discover`：发现一个插件、六个 skills。
+- `plugins` CLI 1.3.4 本地 `discover`：发现一个插件、六个 skills；在独立配置中对本地快照执行 `add --target claude-code --yes`，安装成功。
 - `claude plugin validate .` 与 `claude plugin validate plugin`：分别验证 marketplace 和插件适配。
 - 独立 `CLAUDE_CONFIG_DIR` 中执行 marketplace add、plugin install、plugin list：安装 `lumio-devkit@lumio-devkit` 0.2.0 成功，enabled=true。未改用户实际 Claude 配置，未执行 Agent 会话。
 - 手动安装在独立 data-dir 下分别连接模拟全局与项目 skill 目录；两处各六个 symlink 均能读取 SKILL，已安装 payload 的全部相对链接校验通过。
-- 安装器与校验器合计 19 项回归通过；覆盖重复安装、更新保留旧包、同名目录/外来链接冲突、包内软链拒绝、路径重叠、dry-run、被修改的已安装包与退役 skill 清理。
+- 安装器与校验器合计 20 项回归通过；覆盖重复安装、更新保留旧包、同名目录/外来链接冲突、包内软链拒绝、路径重叠、dry-run、被修改的已安装包、更新不能停用本地改动、多个 target 共用更新与退役 skill 清理。
 - Codex 适配 manifest 校验通过；未在用户实际 Codex 中激活插件。CLI 可发现和适配格式通过，不替代所有客户端的运行验收。

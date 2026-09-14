@@ -83,6 +83,16 @@ class InstallChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'modified'):
             installer.install(self.source, self.data, self.target)
 
+    def test_new_version_does_not_deactivate_local_edits(self):
+        installer.install(self.source, self.data, self.target)
+        first = (self.data/'plugin').resolve()
+        (self.data/'plugin/guide.md').write_text('my local changes')
+        (self.source/'guide.md').write_text('new upstream version')
+        with self.assertRaisesRegex(ValueError, 'modified'):
+            installer.install(self.source, self.data, self.target)
+        self.assertEqual((self.data/'plugin').resolve(), first)
+        self.assertEqual((self.data/'plugin/guide.md').read_text(), 'my local changes')
+
     def test_update_removes_retired_owned_skill_link(self):
         (self.source/'skills/lumio-server').mkdir()
         (self.source/'skills/lumio-server/SKILL.md').write_text('server')

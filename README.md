@@ -68,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/LumioGames/Lumio-DevKit/main/instal
 curl -fsSL https://raw.githubusercontent.com/LumioGames/Lumio-DevKit/main/install.sh | bash -s -- --target .agents/skills
 ```
 
-可用 `--target ~/.claude/skills` 更换技能目录，`--dry-run` 预览写入位置。已有同名目录或非本安装器的链接时明确拒绝；先检查冲突，不强制覆盖。再次执行会更新完整插件，已有旧版本保留在数据目录的 `releases/` 下。多个 target 共用一份数据目录，更新时一起指向新版；需要独立版本时设置不同的 `--data-dir`。
+可用 `--target ~/.claude/skills` 更换技能目录，`--dry-run` 预览写入位置。已有同名目录或非本安装器的链接时明确拒绝；先检查冲突，不强制覆盖。更新前也会检查当前已安装内容，存在本地修改时停止并提示保留处理。再次执行会更新完整插件，已有旧版本保留在数据目录的 `releases/` 下。多个 target 共用一份数据目录，更新时一起指向新版；需要独立版本时设置不同的 `--data-dir`。
 
 Windows 优先使用上面的 `npx plugins` 或 Claude marketplace 安装。手动 Python 安装需要可创建目录符号链接的环境。不要同时启用同一份 DevKit 的插件安装和独立技能安装，以免重复发现。
 
