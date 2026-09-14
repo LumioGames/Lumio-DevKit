@@ -55,3 +55,13 @@
 - 手动安装在独立 data-dir 下分别连接模拟全局与项目 skill 目录；两处各六个 symlink 均能读取 SKILL，已安装 payload 的全部相对链接校验通过。
 - 安装器与校验器合计 20 项回归通过；覆盖重复安装、更新保留旧包、同名目录/外来链接冲突、包内软链拒绝、路径重叠、dry-run、被修改的已安装包、更新不能停用本地改动、多个 target 共用更新与退役 skill 清理。
 - Codex 适配 manifest 校验通过；未在用户实际 Codex 中激活插件。CLI 可发现和适配格式通过，不替代所有客户端的运行验收。
+
+### 公开源复验
+
+发布提交 `89da160ff776fb99fc061cbf010e691e693fb885` 后，使用新的隔离目录从公开 GitHub 源复验：
+
+- `claude plugin marketplace add LumioGames/Lumio-DevKit` → 成功；`claude plugin install lumio-devkit@lumio-devkit` → 成功；列表确认 version=0.2.0、enabled=true。
+- 从公开 `main/install.sh` 下载脚本，经标准输入交给 Bash，在临时 data-dir/target 安装 → 成功，六个技能链接均可读取。用户实际配置未改。
+- `npx plugins@1.3.4 discover LumioGames/Lumio-DevKit` → 从远端 clone 后发现一个插件、六个 skills。
+
+这些验证覆盖安装与发现，不表示已在所有客户端实际运行 Agent 任务。
