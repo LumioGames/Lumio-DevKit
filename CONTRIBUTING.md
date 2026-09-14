@@ -4,7 +4,7 @@
 
 ## 改哪里
 
-- 技能何时触发、从哪里开始：改对应 `SKILL.md`。
+- 技能何时触发、从哪里开始：改对应 `plugin/skills/<name>/SKILL.md`。
 - 具体步骤、示例、故障定位：改该技能的 `references/`。
 - 多个技能共同使用的环境、命名、证据说明：改 `lumio-development` 的对应参考，再从其它技能链接。
 - 美术工作流使用 `lumio-art`；这里不预先规定某个游戏的美术风格。
@@ -25,6 +25,7 @@
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python tools/sync-manifests.py --check
 .venv/bin/python tools/validate.py
 .venv/bin/python -m unittest discover -s tests -v
 ```
@@ -36,3 +37,26 @@ Windows 可使用 `.venv\Scripts\python.exe`。Python 仅用于维护检查，�
 ## 交回
 
 说明改动影响的使用方式、更新位置、实际检查结果，以及未验证项。纯内部改动不必写一篇新文章。文档待补与真实验证失败如实记录，不增加一套日常开发审批门禁。
+
+## 插件发布布局
+
+`plugin/` 是完整可分发边界。根目录是开发仓和 marketplace；工具、测试、CI 留在根。插件里的引用不得回到仓库根，也不能跨出安装缓存。
+
+唯一元数据源是 `plugin/plugin.json`。版本或名称变化后运行：
+
+```sh
+python3 tools/sync-manifests.py
+```
+
+这会重建 Claude/Codex 插件适配、仓库级 marketplace 和插件随附许可证；不要手改生成文件。修改技能内容无需维护多份目录。仓库公开名称是 `Lumio-DevKit`，插件与 marketplace 名保持规范小写 `lumio-devkit`。
+
+安装器回归只在临时 data-dir/target 下运行，覆盖首次安装、更新、冲突、包边界和旧技能清理，不改维护者实际配置。可手工验证：
+
+```sh
+python3 tools/install.py --data-dir /tmp/devkit-check/data --target /tmp/devkit-check/skills
+npx plugins discover .
+claude plugin validate .
+claude plugin validate plugin
+```
+
+`npx`、Claude 发现/校验与真正的客户端加载是不同证据；记录各自实际结果。根目录的 `.claude-plugin/marketplace.json` 采用本地 `./plugin` 来源，使 repository 安装取用同一提交中的 payload。

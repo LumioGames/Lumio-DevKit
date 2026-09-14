@@ -133,7 +133,7 @@ def validate(root, schema):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1]/"plugin")
     parser.add_argument("--schema", type=Path, help="Use a downloaded official 1.0.0 schema offline")
     args = parser.parse_args()
     try:

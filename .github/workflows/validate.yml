@@ -14,5 +14,6 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements-dev.txt
+      - run: python tools/sync-manifests.py --check
       - run: python tools/validate.py
       - run: python -m unittest discover -s tests -v

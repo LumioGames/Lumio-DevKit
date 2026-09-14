@@ -1,0 +1,28 @@
+{
+  "name": "lumio-devkit",
+  "description": "Lumio 游戏开发指引：项目规范、客户端、服务器、体素、配置表与美术工作流。供开发者阅读，也供 Agent 按任务加载。",
+  "owner": {
+    "name": "LumioGames",
+    "url": "https://github.com/LumioGames"
+  },
+  "plugins": [
+    {
+      "name": "lumio-devkit",
+      "source": "./plugin",
+      "version": "0.2.0",
+      "description": "Lumio 游戏开发指引：项目规范、客户端、服务器、体素、配置表与美术工作流。供开发者阅读，也供 Agent 按任务加载。",
+      "homepage": "https://github.com/LumioGames/Lumio-DevKit#readme",
+      "repository": "https://github.com/LumioGames/Lumio-DevKit",
+      "license": "MIT",
+      "keywords": [
+        "lumio",
+        "game-development",
+        "agent-skills",
+        "voxel",
+        "client",
+        "server",
+        "art"
+      ]
+    }
+  ]
+}
