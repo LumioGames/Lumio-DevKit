@@ -56,7 +56,7 @@ public sealed class ChatOnce : BotScenario
 }
 ```
 
-该例未随指南编译或执行；编译时以所取得发布的 XML API 文档核对签名。它只断言真正上行；要证明聊天被应用，再在第二个独立账号客户端的 `World.ChatWindow` 中检查这条消息，并对齐服务器证据。不能把 `Issue.Accepted` 当作广播已完成。
+该例于 2026-09-14 在临时 net10.0 项目中，使用 .NET SDK 10.0.400 和现有 Bot 开发程序集编译通过（0 警告、0 错误）；未执行真实宿主或网络验证。使用其他发布时仍以随包 XML API 文档核对签名。它只断言真正上行；要证明聊天被应用，再在第二个独立账号客户端的 `World.ChatWindow` 中检查这条消息，并对齐服务器证据。不能把 `Issue.Accepted` 当作广播已完成。
 
 `BotDriverContext.World` 是只读观察面：`HasSelf`、`InputEnabled`、`Self`、实体数量和 `ChatWindow`。通过 `Vocabulary` 获取组件/成员/参数类型，再用 `Issue` 提交命令，不在场景中直接推进世界或修改副本。`TryGet` 找到的项也可能不可用，仍须检查 `Available` 与 `BlockedReason`。
 

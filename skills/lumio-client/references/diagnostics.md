@@ -43,6 +43,8 @@ rg '"kind":"(vocabulary|issue|assert|run)"' .run/chat-once/result.ndjson
 
 普通操作拒绝与会话数据损坏是不同问题。拒绝应有明确结果，并允许后续合法操作继续；若 SDK 把普通拒绝升级为世界故障，保留首次错误、输入和前后 Tick，报告缺陷，不在游戏侧吞异常或重置世界。
 
-现有生产 Bot 在普通网络断开后可能尝试从平台重新取票，相关环境包括 `LUMIO_PLATFORM_ORIGIN`、`LUMIO_GAME_SLUG`、`LUMIO_ACCOUNT_PASSWORD` 及 Bot 工具凭据。这是当前宿主行为，不是本指南建议的恢复策略；缺少这些材料也不等于存在受支持的“禁用重连”开关。若任务要求断线即停，现有 CLI 的行为需先满足该要求，不能宣称已经可配置。
+普通网络断开允许宿主在完整回收旧代资源后，从平台取得新端点和新准入票，再建立连接、绑定并接收初始状态。现有生产 Bot 使用 `LUMIO_PLATFORM_ORIGIN`、`LUMIO_GAME_SLUG`、`LUMIO_ACCOUNT_PASSWORD` 及 Bot 工具凭据完成取票；取票、准入或数据应用失败就结束本次恢复，不用旧票无限重试。旧连接的未确认输入与预测历史作废，新连接只接受新输入。这条重连流程不属于用重放掩盖操作错误。
 
-被同账号接管或数据应用失败后，保存原因并结束本次实验；不要自动重放旧输入。自建 Host 调用 `IClientSession.Dispose()` 后仍需在原 owner 循环继续 Tick，读取快照 `CleanupStatus` / `IsDisposed` 确认释放完成，再释放 Native 资源。不得用跨线程补 Tick 或直接卸载 Native 库处理卡顿。
+数据校验、权威应用或必要预测重建失败时，立即禁输入、停止发布并最终释放当前游戏 Session，不触发上述自动重连；仍有效的平台账号会话可以保留，用户手动重新进入时创建新 Session。正常退出或同账号接管也不触发自动恢复。客户端预测重建本身仍是 Runtime/GAS 的独立正常机制，不能因为禁止错误兜底就一并禁止。
+
+自建 Host 调用 `IClientSession.Dispose()` 后仍需在原 owner 循环继续 Tick，读取快照 `CleanupStatus` / `IsDisposed` 确认释放完成，再释放 Native 资源。清理失败时保留未释放证据，不自动开新代；不得用跨线程补 Tick 或直接卸载 Native 库处理卡顿。
