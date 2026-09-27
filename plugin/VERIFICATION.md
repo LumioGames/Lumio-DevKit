@@ -1,67 +1,119 @@
-# 首版验证记录
+# v0.0.2 手册整理核对记录
 
-核对日期：2026-09-14。DevKit `0.1.0` 是指引与技能包，不是引擎版本；以下结果不能互相替代。
+核对日期：2026-09-27。本文记录本轮手册整理的证据边界；文档静态检查、Sample 构建和十四步运行分别记账，不能相互替代。目标插件版本为 0.3.0，不是引擎版本。
 
-## 使用说明的阅读基线
+## 核对基线
 
-| 公开来源 | 本次核对提交 |
-| --- | --- |
-| [LumioSample](https://github.com/LumioGames/LumioSample) | `b236d2e12206dd1f5b12a9958810d92c2f49f13c` |
-| [LumioConfig](https://github.com/LumioGames/LumioConfig) | `f0dba85efc2a3935fa0ab18c643d49523166ff4e` |
-| [LumioGame](https://github.com/LumioGames/LumioGame) | `79a50ab2f7585e714f1e9b171cd34675df88f28f` |
+| 来源 | 核对基线 | 证据 |
+| --- | --- | --- |
+| LumioSample | origin/main · f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb | git -C <LumioSample> rev-parse origin/main 返回该 SHA。不得从脏工作区读取。 |
+| LumioEngineRelease | v0.0.2 · peeled commit 9e57979049fe727e02992ad48116ce1324a42277 | git ls-remote https://github.com/LumioGames/LumioEngineRelease.git refs/tags/v0.0.2 refs/tags/v0.0.2^{} 返回 tag object 8be501dc69c4be4678b147f43939a6ecd0f77420 与该 peeled commit；发布物 manifest.json 的 version 为 0.0.2。 |
+| LumioConfig（仅在手册仍引用时核对） | origin/main · dd127edd87a00764b2b3ffb210df9f4b8d44d70a | git -C <LumioConfig> rev-parse origin/main。 |
+| LumioGame（仅在手册仍引用时核对） | origin/main · 6a053af4618fff341af8cf0345e233054be4d0e8 | git -C <LumioGame> rev-parse origin/main。 |
+| 插件 | plugin.json 目标版本 0.3.0 | 改动后读 plugin/plugin.json，再以 tools/sync-manifests.py --check 对适配文件作一致性核对。本轮开始时旧值为 0.2.0，不能把旧值当作完成证据。 |
 
-还对照了引擎当前公共 API 签名与宿主命令实现，用原创说明描述使用面。私有实现未包含在本插件中，外部操作指南不要求读取私有源码。
+发布物 v0.0.2 的 SDK 包为 sdk/Lumio.Engine.SDK.0.0.2.nupkg。从发布 tag 读取其目录可见 content/docs/public-api.md、content/docs/error-codes.md、content/sdk-version.json 和 content/wire/；错误码页声明覆盖 257/257 个公共码。核对命令如下，输出只保留文件名和版本，不把包解压进项目：
 
-## 实际运行
+~~~sh
+curl -LfsS https://raw.githubusercontent.com/LumioGames/LumioEngineRelease/v0.0.2/manifest.json
+curl -LfsS https://raw.githubusercontent.com/LumioGames/LumioEngineRelease/v0.0.2/sdk/Lumio.Engine.SDK.0.0.2.nupkg -o <tmp>/Lumio.Engine.SDK.0.0.2.nupkg
+unzip -l <tmp>/Lumio.Engine.SDK.0.0.2.nupkg | grep -E 'content/(docs/(public-api|error-codes)\.md|sdk-version\.json)$'
+unzip -p <tmp>/Lumio.Engine.SDK.0.0.2.nupkg content/sdk-version.json | head
+~~~
 
-- 官方 Agent Plugins 1.0.0 manifest schema 与仓内路径/链接校验：`PASS: skills=6, issues=0`。六份 SKILL 另经 Agent Skills 快速校验，均通过；未把这项检查当作宿主 UI 安装验证。
-- 配表工具在独立 checkout 中使用 Python 3.11 实际完成校验、格式检查、registry/查询、补丁预检/预演/应用与导出。数值 `1.25 → 1.5` 同步进入 S/C 导出；15 个 Reader 文件不变。同源重复导出得到 23 个 JSON 和 15 个 Reader 的相同字节；S-only 列从客户端数据与 Reader 移除、服务器保留。
-- 四个原创配置/体素示例类在独立 net10.0 项目引用已有程序集编译，0 warnings、0 errors；真实 Loader 读取旧/新值，验证缺行和不存在导出根的失败。体素部分只编译，不执行 Native 查询。`patch validate` 对低于 minimum 的输入不足以发现所有问题，实际 `preview` 以 `RANGE_OVERFLOW` 拒绝，指引保留了这一区别。
+因此 diagnostics 页可以直接以该包的 content/docs/error-codes.md 为完整表来源，正文只挑按症状需要的常见码；“没有随附参考”这一上游缺口不成立。manifest.json 列出的运行平台是 win-x64 和 linux-x64；其它平台若未取得对应发布物，仍须记作 BLOCKED_ENV。
 
-- 维护检查器先用无校验实现运行负例：8 项中 7 项失败；补齐后 8 项通过。覆盖坏链接、包外路径、越界软链、缺技能入口、名称不匹配和 schema 拒绝。
-- 从 Sample 上述提交建立隔离快照，运行 `node --test integration/verify-evidence.mjs`：17 passed、0 skipped、退出 0。它验证证据处理工具和固定夹具，不是真实 Platform/DS/Bot 十四步。
-- 客户端指引的原创 `ChatOnce` 代码从 Markdown 提取，在独立 net10.0 类库中引用已有 Bot/Input/Replica/Ecs 程序集编译：.NET SDK 10.0.400，0 warnings、0 errors。未建立网络连接，不能作为消息交付证明。
-- 美术交接示例 JSON 已解析检查；未生成美术图片、运行渲染器或验证统一资产导入器。
+## Sample 路径、类名和命令核对表
 
-## 本次确认的失败与限制
+以下结果来自 origin/main 的只读 git cat-file / git grep，不是本机 Sample 工作区。Engine 是 gitlink，使用 git ls-tree 核对。
 
-1. 公共 NuGet `lumio.engine.sdk` 包索引返回 HTTP 404。未把 SDK 公共发布当作已完成前提。
-2. 隔离 Sample 快照与本机缓存 SDK 0.1.0 组合，restore 成功、build 失败：`NETSDK1022`，三个生成的配置 Reader 被重复计入 Compile。MSBuild 求值确认同一文件分别由默认 glob 与模板显式 Include 加入；缓存包仅有 SDK targets，未包含模板预期的 props。
-3. 该次缓存 nupkg 的 SHA-256 为 `0486c8fda30b08158ce7f41a2175319babbd5f9f6043afb74d6dd6e2635759d6`。此结果只约束这组产物，不推断所有名为 0.1.0 的包都相同。没有关闭默认编译检查或修改源仓来消除失败。
-4. 未执行真实双端联调、Native 体素场景、跨进程存档恢复、Windows/Linux 发行矩阵或宿主插件 UI 安装。纯配置/文档检查不代表这些链路可用。
+| 手册引用 | 核对命令 | 只读结果 |
+| --- | --- | --- |
+| Gameplay/EntityTypes/BoxEntity.cs | git -C <LumioSample> cat-file -e origin/main:Gameplay/EntityTypes/BoxEntity.cs | PRESENT |
+| Gameplay/Components/Box/BoxComponent.cs | git -C <LumioSample> cat-file -e origin/main:Gameplay/Components/Box/BoxComponent.cs | PRESENT |
+| Gameplay/Abilities/MineAbility.cs、.Server.cs、.Client.cs | 对三个路径分别执行 cat-file -e | 均 PRESENT |
+| Gameplay/Abilities/PickupAbility.cs、.Server.cs、Gameplay/Effects/PickupOreEffect.cs | 对三个路径分别执行 cat-file -e | 均 PRESENT |
+| Gameplay/Config/SampleConfigBinding.cs、SampleTypedTables.cs、SampleTables.cs | 对三个路径分别执行 cat-file -e | 均 PRESENT；配置运行时示例直接取自这些文件 |
+| Gameplay/Abilities/MoveAbility.cs、Gameplay/SampleMiningComponent.Client.cs、.Server.cs | 对三个路径分别执行 cat-file -e | 均 PRESENT；查询、物理扫掠和挖穿提交示例均可回指 |
+| Server/Assets/Maps/、Server/Config/Startup/server.json | 对路径执行 cat-file -e | 均 PRESENT |
+| Tools/launcher.mjs、Tools/tour-steps.mjs、Tools/update-engine.mjs | 对三个路径分别执行 cat-file -e | 均 PRESENT；update-engine.mjs 的用法是 node Tools/update-engine.mjs <version> |
+| Client/Assets/Blocks/、Tools/check-block-assets.mjs | 对路径执行 cat-file -e | 均 PRESENT |
+| .github/workflows/tour.yml、Client/Bots/SampleMiningScenario.cs、Client/Bots/SampleRestoreVerifyScenario.cs | 对三个路径分别执行 cat-file -e | 均 PRESENT；十四步由 Tools/launcher.mjs 驱动，CI 工作流文件不是根目录 tour.yml |
+| Engine 子模块 | git -C <LumioSample> ls-tree origin/main Engine | 160000 commit 9e57979049fe727e02992ad48116ce1324a42277 Engine，与 v0.0.2 peeled commit 一致 |
+| 已改名的旧路径 src/Lumio.Sample.Gameplay、maps、server.json、integration/launcher.mjs | 对每项执行 git cat-file -e origin/main:<旧路径> | 均 OLD_ABSENT；不要把缺失旧路径误报为 Sample 缺文件 |
+| HostEntry | git -C <LumioSample> grep -n -F 'Lumio.Server.HostEntry.HostEntry, Lumio.Server.HostEntry' origin/main -- Server/Config；再查 LumioHostEntry | server.json、server.sample.json、server.acceptance.json 均出现 Lumio.Server.HostEntry.HostEntry 与 LumioHostEntry |
+| BlockId 宽度 | git -C <LumioSample> grep -n -E 'uint blockId|uint.*BlockId' origin/main -- Gameplay Server | MineAbility.ClassifyPredictedDig(..., uint blockId, ...) 等消费面出现 uint；字段最终含义仍以 SDK v0.0.2 公共参考为准 |
 
-具体步骤和受影响用法见 [入门](skills/lumio-development/references/getting-started.md)、[客户端](skills/lumio-client/SKILL.md)、[服务器](skills/lumio-server/SKILL.md)、[体素](skills/lumio-voxel/SKILL.md)、[配置表](skills/lumio-config/SKILL.md) 和 [美术](skills/lumio-art/SKILL.md)。
+有三个容易误判的静态结果：ISampleVoxelBinding 只在 Sample 的退役说明/测试中留下历史文字，生产绑定入口不是它；RecordingAbilityPhysicsPort 在测试夹具中仍可出现，不能据全仓 grep 断言“仓库没有”；catch (Exception) 在客户端旁观宿主等其它代码中可能存在，验收时必须限定 Gameplay/Abilities/MoveAbility*。这些结果只能证明引用没有把已退役的消费入口写成当前 API，不能证明宿主真实运行。
 
-## 示例编译的二进制边界
+## 本仓三项检查
 
-配置/体素代码验证使用已有开发程序集，未重新构建源仓；因此不能证明这些文件与本次阅读的源码提交一一对应，也不替代 SDK 分发包验证。实际引用文件 SHA-256：
+下列命令已在完成文档和 plugin/plugin.json 改动后从仓根执行；结果只说明本仓插件检查，不替代 Sample、DS、Bot 或浏览器运行。
 
-| 程序集 | SHA-256 |
-| --- | --- |
-| Config | `5bb74713fe7d5de1a7073202c666fe9f893e8e2132475e3b6254d4949e35d32d` |
-| Coordination | `7855f0ddaa515ea78a7b938c027ecf7d9c6b27af514fca411a4356cc98f36653` |
-| Ecs | `46f6b7840aa695c4d011b47b7f4ddd82fe1275159433b81298db3694eaeb8b57` |
-| Primitives | `4a5408d6d99c61d14f64369154043c861583415e4f3026cabfd0dd106e87c0dc` |
+| 检查 | 命令 | 结果 |
+| --- | --- | --- |
+| 生成适配文件一致性 | python3 tools/sync-manifests.py --check | PASS（exit 0）：Host adapters match portable manifest |
+| 包内 schema、技能元数据和相对链接 | python3 tools/validate.py | PASS（exit 0）：skills=7, issues=0 |
+| 安装器/校验器回归 | python3 -m unittest discover -s tests -v | PASS（exit 0）：Ran 20 tests in 0.064s，OK；它不证明 Sample、DS、Bot 或浏览器运行。 |
 
-这些程序集没有打入 DevKit；表格用于说明本次编译证据用了什么。
+validate.py 只检查插件包边界、frontmatter 和 Markdown 文件链接，不能证明链接页内容准确、API 签名存在或客户端真的加载技能。sync-manifests.py --check 只证明适配文件由 plugin/plugin.json 生成，不能证明安装器或宿主 UI 可用。
 
-## 0.2.0 安装分发验证（2026-09-14）
+## 文档内容验收
 
-仓库公开名称改为 `LumioGames/Lumio-DevKit`；插件与 marketplace 标识保持 `lumio-devkit`。插件本体移入 `plugin/`，技能内容保留，根目录只负责开发与分发。
+逐项复核以下要求，未找到对应证据时保持未完成：
 
-- `plugins` CLI 1.3.4 本地 `discover`：发现一个插件、六个 skills；在独立配置中对本地快照执行 `add --target claude-code --yes`，安装成功。
-- `claude plugin validate .` 与 `claude plugin validate plugin`：分别验证 marketplace 和插件适配。
-- 独立 `CLAUDE_CONFIG_DIR` 中执行 marketplace add、plugin install、plugin list：安装 `lumio-devkit@lumio-devkit` 0.2.0 成功，enabled=true。未改用户实际 Claude 配置，未执行 Agent 会话。
-- 手动安装在独立 data-dir 下分别连接模拟全局与项目 skill 目录；两处各六个 symlink 均能读取 SKILL，已安装 payload 的全部相对链接校验通过。
-- 安装器与校验器合计 20 项回归通过；覆盖重复安装、更新保留旧包、同名目录/外来链接冲突、包内软链拒绝、路径重叠、dry-run、被修改的已安装包、更新不能停用本地改动、多个 target 共用更新与退役 skill 清理。
-- Codex 适配 manifest 校验通过；未在用户实际 Codex 中激活插件。CLI 可发现和适配格式通过，不替代所有客户端的运行验收。
+1. getting-started 使用 git clone --recursive 或 git submodule update --init 获取 Engine/，升级只写 node Tools/update-engine.mjs <版本>，不再把 -p:LumioLocalFeed= 当作当前模板必经步骤。
+2. 全手册使用新路径 Gameplay/、Server/Assets/Maps/、Server/Config/Startup/server.json、Tools/launcher.mjs；旧路径只可出现在迁移提示或历史说明。
+3. lumio-server/setup 使用 Lumio.Server.HostEntry.HostEntry / LumioHostEntry；体素页按 SDK v0.0.2 说明 BlockId 为 uint，不把退役的 ISampleVoxelBinding.TryBind、Recording 物理端口或 MoveAbility 宽泛捕获写成当前接线。
+4. 美术页引用 WebGL2、方块资产契约、Client/Assets/Blocks/ 和 Tools/check-block-assets.mjs，并区分文件检查与浏览器画面复验。
+5. 客户端页写清 git、.NET SDK、Node、Docker 等前置；十四步真实结果只能由 step=NN、DS 日志、Bot 生命周期日志、result.ndjson 和第 14 步同存储重启证据给出。
+6. 新增 lumio-gameplay，入口保持短小，至少有 entities-and-components、sync-and-rpc、gas-abilities、tick、code-generation 五篇 reference；每个 Sample API 例子能由上表的 git grep / cat-file 回指。
+7. diagnostics 按症状列四列（关闭原因/错误码、含义、处理方式等）；DS 关闭原因来自 Engine/web/ds-close-codes.mjs，体素/持久化码来自 SDK 包内 content/docs/error-codes.md，Host/Sample 私有码已明确标注。
+8. README 新增只含链接的“按顺序学”：入门 → 概念 → 教程（十四步）→ 操作 → 参考 → 排障；不要复制 reference 正文。
+9. 每篇 reference 末尾只保留一行统一证据边界：核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）。能力不存在、未接线、缺运行环境和本次未验证四种情况要分别写。
+10. README 当前阶段与本文件基线一致；正文不出现私有仓路径、绝对本机路径、内部单号或凭据；只改 DevKit，不改 Sample、Engine 或其它引擎仓。
 
-### 公开源复验
+可用下面的静态筛查找漏项，但它不是内容正确性的充分证据；排除了本记录和明确的迁移提示，剩余命中才需要修正文案：
 
-发布提交 `89da160ff776fb99fc061cbf010e691e693fb885` 后，使用新的隔离目录从公开 GitHub 源复验：
+~~~sh
+rg -n 'src/Lumio\.Sample\.Gameplay|(^|[^A-Za-z])maps/|integration/launcher\.mjs|ISampleVoxelBinding\.TryBind|RecordingAbilityPhysicsPort|catch \(Exception\)' plugin/skills README.md --glob '*.md' --glob '!plugin/skills/lumio-config/references/edit-and-export.md'
+rg --files-without-match '核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0\.0\.2' plugin/skills -g '*.md'
+~~~
 
-- `claude plugin marketplace add LumioGames/Lumio-DevKit` → 成功；`claude plugin install lumio-devkit@lumio-devkit` → 成功；列表确认 version=0.2.0、enabled=true。
-- 从公开 `main/install.sh` 下载脚本，经标准输入交给 Bash，在临时 data-dir/target 安装 → 成功，六个技能链接均可读取。用户实际配置未改。
-- `npx plugins@1.3.4 discover LumioGames/Lumio-DevKit` → 从远端 clone 后发现一个插件、六个 skills。
+## Sample 构建和十四步运行
 
-这些验证覆盖安装与发现，不表示已在所有客户端实际运行 Agent 任务。
+这两项不能以接口存在、静态路径或仓内单元测试替代。为避免读取脏工作区，使用新的临时目录和递归子模块，并显式检出上面的 origin/main SHA：
+
+~~~sh
+git clone --recursive https://github.com/LumioGames/LumioSample.git <tmp>/LumioSample
+git -C <tmp>/LumioSample checkout f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb
+git -C <tmp>/LumioSample submodule update --init --depth 1 Engine
+cd <tmp>/LumioSample
+dotnet build LumioSample.slnx
+~~~
+
+本轮在新的递归临时 clone 中完成上述干净目录构建：checkout 为 f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb，Engine gitlink 为 9e57979049fe727e02992ad48116ce1324a42277，manifest version=0.0.2；`dotnet build LumioSample.slnx` exit 0、0 errors、2 warnings（当前 macOS RID 没有 SDK native asset，managed compile 不受影响）。构建 PASS 只覆盖编译，不替代 DS/Bot/浏览器运行。
+
+需要 Docker 和匹配发布物时，十四步命令为：
+
+~~~sh
+dotnet build Gameplay/Lumio.Sample.Gameplay.csproj -p:LumioEcsSide=client
+dotnet build Client/Bots/Lumio.Sample.Bots.csproj
+node Tools/launcher.mjs --bots 2 --stagger-ms 250 \
+  --scenario-dll Client/Bots/bin/Debug/net10.0/Lumio.Sample.Bots.dll
+~~~
+
+客户端 Gameplay 构建 exit 0、1 warning；Bot 默认构建在 macOS host exit 1，首个错误为 `SAMPLE_BOTS_CLIENT_BOT_MISSING`（Engine v0.0.2 仅随 win-x64/linux-x64 Bot.Host；当前 host 为 osx-x64）。以 `-p:NETCoreSdkRuntimeIdentifier=linux-x64` 可完成 Bot managed compile，但 launcher 仍按本机 RID 选择 Engine 运行物，因此不改变本机运行结论。Docker `docker info` 可用（29.5.2）。十四步 launcher 本轮记为 `BLOCKED_ENV`，未进入 step=01..14；真正通过必须同时保存：
+
+- step=01 到 step=14 的逐步状态；任一步 BLOCKED_ENV（exit 2）都不是通过；
+- 第 04 步 Bot 日志中的 Active … established，不能用 DS 进程启动替代进房；
+- 第 05–13 步的 DS 日志、导览 Bot 生命周期日志和非空未截断的 result.ndjson；
+- 第 14 步在同一存储上停 DS、重启并让同一账号由 SampleRestoreVerifyScenario 复核地图缺口和矿石数；
+- 两轮独立目录的世界断言与哈希对账摘要。
+
+## 上游缺口和未验证项
+
+- SDK v0.0.2 随附公开 API、错误码和 wire 参考，已在上面的 nupkg 目录核对；不应再把“没有随附参考”写成事实。
+- 发布 manifest 只列 win-x64 / linux-x64；未取得相应宿主或在其它平台运行时，应报告 BLOCKED_ENV，不得拿接口或其它平台 DLL 代替。
+- 干净 Sample build 已 PASS；客户端 Gameplay 编译已 PASS；Docker 可用但 Platform/DS/Bot 十四步因 macOS 无 v0.0.2 osx-x64 发布物而为 BLOCKED_ENV，未执行真实浏览器画面、跨进程存档恢复和 Windows/Linux 矩阵。静态示例、仓内测试和适配器检查不能替代它们。
+- 当前本地 Sample checkout 可能是脏的或未初始化 Engine/；它不是验收基线。只接受上表的 origin/main 和 v0.0.2 release 证据。

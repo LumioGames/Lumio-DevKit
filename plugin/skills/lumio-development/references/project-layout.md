@@ -1,72 +1,61 @@
 # 项目布局与开发规范
 
-目标：让新成员知道新增文件放哪里、哪些约定会影响运行、怎样保持双端与生成结果一致。
+这页说明共享玩法怎样放文件、怎样拆服务器和客户端，以及哪些文件由生成器维护。
 
-## 目录从公开模板开始
+## Sample 的实际布局
 
 ```text
 my-game/
-  src/Game.Gameplay/
-    EntityTypes/              # 实体声明
-    Components/<Feature>/     # 共享声明与按端实现
-    Abilities/                # 玩法技能
-    Effects/                  # 效果
-    Config/                   # 游戏读表装配
-    generated/                # 生成器输出
-  tests/                      # 对应的逻辑与回归测试
-  config/                     # 部署用配置导出物
-  maps/                       # 可加载的地图快照与作者说明
-  integration/                # 联调启动器与证据验证
-  art/                        # 建议的资产工作区，见美术指引
-  .run/                       # 本地运行配置、日志、临时结果（忽略入库）
+  Gameplay/                       # 两端共享的实体、组件、技能与效果
+    EntityTypes/
+    Components/<Feature>/
+    Abilities/
+    Effects/
+    generated/                    # SDK 生成的注册表和绑定
+  Server/                         # DS 配置、表导出、地图和服务器测试
+    Config/Startup/server.json
+    Config/Tables/
+    Assets/Maps/
+  Client/                         # 客户端表、方块资产、Bot 和 UI
+    Config/Tables/
+    Assets/Blocks/
+    Bots/
+    UI/
+  Tools/                          # launcher、engine update、资产检查和测试脚本
+  .run/                           # 被 gitignore 的日志、存档和本次证据
 ```
 
-这是参考布局，不是要求所有项目迁移目录。Sample 的实际程序集目录为 `src/Lumio.Sample.Gameplay/`；新游戏名字只是上图示意。配表的权威文本、Schema 与部署导出物分开放，详见 [配置表](../../lumio-config/SKILL.md)。
+这是 Sample `origin/main` 的公开结构；新游戏可沿用，但不要为了符合示意图搬动已有项目。
 
-## 必须区分的文件
+## 共享 Gameplay 如何拆两端
 
-| 文件 | 含义 | 更新方式 |
+| 文件 | 作用 | 构建侧 |
 | --- | --- | --- |
-| `ChatComponent.cs` | 双端共享的组件/RPC 声明 | 修改声明后重新生成并构建 |
-| `ChatComponent.Server.cs` | 服务器实现 | 服务器目标包含，客户端目标排除 |
-| `ChatComponent.Client.cs` | 客户端实现 | 客户端目标包含，服务器目标排除 |
-| `generated/**/*.cs` | 注册表、绑定和 Reader 等生成结果 | 改生成源，使用项目已有生成命令重建 |
-| `server.json`、本地覆盖文件 | 宿主加载与运行配置 | 路径必须指向本次匹配产物 |
+| `Gameplay/EntityTypes/PlayerEntity.cs`、`Gameplay/Components/Chat/ChatComponent.cs` | 实体/组件/RPC 的共享声明 | 两端 |
+| `*.Server.cs` | 权威业务、服务端提交和服务器 RPC 实现 | 服务器 |
+| `*.Client.cs` | 输入、客户端表现和预测实现 | 客户端 |
+| `Gameplay/generated/client/**`、`Gameplay/generated/server/**` | 生成的注册表、同步绑定和模板 | 由 SDK 生成，不能手改 |
+| `Server/Config/Startup/server.json` | DS 入口和存档/体素配置模板 | 服务器运行时 |
+| `Server/Assets/Maps/**` | 底图、目录和地图说明 | 服务器/作者工具 |
 
-`.Server.cs` / `.Client.cs` 具有实际构建意义：核对版本的模板按 `LumioEcsSide` 排除另一端文件。不要把需要执行的客户端代码只写在服务器文件，也不要手工把两端输出覆盖到同一目录。
+Sample 的 `Directory.Build.targets` 用 `LumioEcsSide=client` 选择客户端，并排除另一端的后缀文件；默认构建是服务器侧。两端必须保持相同 namespace、类型名和 partial 签名。ID 是协议身份，不能靠重命名或文件排序改变。
 
-一个已有类型的共享声明和两个实现文件应保持相同 namespace、类型名、泛型参数与 partial 签名。新声明参考模板的 `[EcsComponent]`、`[EntityType]` 和 `[Has]` 用法；注册表生成后再验证创建入口。ID 是协议身份，不能只为文件排序而重编号。
+## 新增声明的步骤
 
-## 命名与代码风格
+1. 在 `Gameplay/EntityTypes/` 或 `Gameplay/Components/<Feature>/` 添加共享声明。
+2. 需要服务器逻辑时添加同名 `.Server.cs`；需要输入/表现时添加 `.Client.cs`。
+3. 用 [Gameplay 指引](../../lumio-gameplay/SKILL.md) 的代码生成命令构建两侧，检查 `Gameplay/generated/{server,client}/` 的新注册表。
+4. 分别构建服务器与客户端，确认生成程序集落在不同输出目录。
+5. 用真实 DS/Bot 或浏览器场景核对实体、同步和表现；静态生成成功不等于运行时已接线。
 
-以下为推荐约定，已有项目以其 formatter 与周边风格为准：
+生成物不得手改。变更声明、字段、RPC 或 Attribute 后，重新运行项目已有生成器并把生成结果与源一起提交。
 
-- C# 类型、方法、文件采用 PascalCase，文件名对应主要类型；保留双端文件后缀。
-- 文档和脚本采用 kebab-case；配置列名与数据文件名服从现有 Schema，不通过批量重命名改变契约。
-- 测试名描述行为或失败条件；日志模板使用具名字段而不是拼接无法检索的长字符串。
-- 注释解释约束与原因，避免复述代码。公开 API 的必需参数、单位和线程归属写明确。
-- 新依赖只在确实需要时加入；不要在游戏层另外实现已有定时、状态机、地形查询或预测算法。
+## 相关入口
 
-生成物不能手改是维护约束；本节推荐命名不是一套新构建门禁。
+- [实体与组件](../../lumio-gameplay/references/entities-and-components.md)
+- [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md)
+- [代码生成](../../lumio-gameplay/references/code-generation.md)
+- [服务器配置](../../lumio-server/references/setup.md)
+- [客户端构建](../../lumio-client/references/setup.md)
 
-## 改动示例：调整聊天行为
-
-1. 找到公开模板 `Components/Chat/` 的共享声明与两端实现。
-2. 只改服务器日志文案时，不改共享 RPC 名、字段布局或映射 ID。
-3. 若要增加消息字段，先确认包提供的生成器支持该类型，更新共享声明与两端实现，再重新生成与构建。
-4. 用一条实际消息检查服务端处理和接收端展示；方法返回或排队成功不等于消息已送达。
-5. 将运行日志留在本地证据目录，避免将票据、账号口令或大体积产物提交到源码库。
-
-## 谁应该改哪里
-
-| 变化 | 维护位置 |
-| --- | --- |
-| 一款游戏的实体、技能、数值、表现 | 游戏项目 |
-| 表结构、导出与 Reader 用法 | 配表源/工具及相应游戏消费处 |
-| 公开 API、跨端字段或错误语义不足 | 引擎维护方；在取得版本化接口后更新消费者 |
-| 推荐用法与故障定位变化 | DevKit 对应的一篇指引 |
-| 一次任务的进度与完整历史报告 | 团队已有任务系统，不复制进使用手册 |
-
-## 来源
-
-[公开模板目录](https://github.com/LumioGames/LumioSample/tree/b236d2e12206dd1f5b12a9958810d92c2f49f13c/src/Lumio.Sample.Gameplay) 与 [双端构建规则](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/Directory.Build.targets)，核对于 2026-09-14。目录树中的 `Game.Gameplay` 与 `art/` 是新项目建议。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

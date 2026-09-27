@@ -1,6 +1,6 @@
 # 表源、Schema 与可见性
 
-本文以 2026-09-14 核对的公开 `LumioConfig f0dba85` 为例。命令执行见 [编辑与导出](edit-and-export.md)，运行期读取见 [读取与更新](runtime-and-updates.md)。
+本文以 2026-09-27 核对的公开 `LumioConfig origin/main@dd127edd87a00764b2b3ffb210df9f4b8d44d70a` 为例。命令执行见 [编辑与导出](edit-and-export.md)，运行期读取见 [读取与更新](runtime-and-updates.md)。
 
 ## 文件关系
 
@@ -27,7 +27,8 @@
   "type": "f64",
   "required": true,
   "minimum": 0,
-  "visibility": "CS"
+  "visibility": "CS",
+  "sharedPrediction": true
 }
 ```
 
@@ -70,4 +71,6 @@
 
 覆盖层按 `engine → platform → server → product → environment` 合并，只覆盖源表已有行。改了 `tables/` 仍看不到新值时，先查导出的 `origins.json` 与覆盖层；运行时的 Session/User 数据不是这个 CLI 的第六张作者表。
 
-公开资料：[源格式](https://github.com/LumioGames/LumioConfig/blob/f0dba85efc2a3935fa0ab18c643d49523166ff4e/docs/reference/source-format.md)、[movement Schema](https://github.com/LumioGames/LumioConfig/blob/f0dba85efc2a3935fa0ab18c643d49523166ff4e/schemas/movement.json)、[Reader 类型映射](https://github.com/LumioGames/LumioConfig/blob/f0dba85efc2a3935fa0ab18c643d49523166ff4e/docs/reference/csharp-reader.md)。
+公开资料：[源格式](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/source-format.md)、[movement Schema](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/schemas/movement.json)、[Reader 类型映射](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/csharp-reader.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

@@ -1,96 +1,53 @@
 # 读取与地形物理查询
 
-先确认已满足 [世界与地图](world-and-maps.md) 的 Host 前置条件。本页签名核对于 2026-09-14；以下代码是独立编写的 SDK 用法示例。
+先确认已满足 [世界与地图](world-and-maps.md) 的 Host 前置条件。本页按 Engine v0.0.2 核对；以下示例只使用公开 SDK 消费面。
 
-## 读格子：先看可用性
+## 读格子：只使用 Sample 已接线的读法
 
-`Lumio.GameRuntime.Coordination.IVoxelGameplayQueries` 提供：
+公开 Sample 的客户端反向定位在 [`Gameplay/SampleMiningComponent.Client.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/SampleMiningComponent.Client.cs)。它通过 `VoxelGameplayBinding.Resolve(World.Manager)` 取得适配器，再调用 `TryReadSectionBindings`；定位不到时返回 `false`，不把“本端尚未收到 Section”当作没有绑定。挖矿的实际格子读取也只使用 `HostVoxelWorldAdapter.Read`，再检查 `VoxelCellQuery.HasBlockId`、`BlockId` 和 `SectionRevision`。
 
-```csharp
-VoxelCellQuery Read(ulong sectionKey, int cellOffset);
-VoxelCellQuery[] Read(IReadOnlyList<(ulong SectionKey, int CellOffset)> cells);
-```
-
-结果包含 `HasBlockId`、`Presence`、`ushort BlockId` 和 `ulong SectionRevision`。
-
-| 结果 | 游戏怎样处理 |
-| --- | --- |
-| `Ready` 且 `HasBlockId` | 可以使用本次方块值和修订；空气判断也必须走到这里 |
-| `Unchanged` | 按匹配版本/底图的已有数据解析“未改变”；没有相应基线就不能猜方块值 |
-| `Pending` | 等待数据就绪，选格或建造可以显示暂不可用 |
-| `Unavailable` | 拒绝依赖该区域的当前操作并展示可提供的原因 |
-| 没有 `HasBlockId` | 不使用默认的 `BlockId` 字段作为真实结果 |
-
-下面这个辅助方法采用保守策略，仅接受本次完整读值；是否允许放置还需游戏自己的距离、库存、目标占用等判断。
+客户端挖矿代码中的真实读取片段如下（[`Gameplay/Abilities/MineAbility.Client.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Abilities/MineAbility.Client.cs)）：
 
 ```csharp
-using Lumio.GameRuntime.Coordination;
-
-public static class TerrainRead
-{
-    public static bool TryReadReady(
-        IVoxelGameplayQueries queries, ulong sectionKey, int cellOffset,
-        out VoxelCellQuery cell)
-    {
-        cell = queries.Read(sectionKey, cellOffset);
-        return cell.Presence == VoxelPresence.Ready && cell.HasBlockId;
-    }
-}
+VoxelCellQuery read = resolved.Read(section, offset);
+PredictedDigVerdict verdict = ClassifyPredictedDig(true, read.HasBlockId, read.BlockId,
+    read.HasBlockId ? resolved.BindingGet(section, offset) : null, reserve.Entity.ToHex());
 ```
 
-调用返回 `false` 时只中止这次依赖读值的操作。不要清空世界、把玩家位置改成安全点或关闭整个房间。SDK 抛错是另一条诊断路径，应保存原始异常与操作上下文。
+没有 `HasBlockId` 时，Sample 不把 `BlockId` 当作有效结果；`SectionRevision` 只作为同一读值对应的并发身份传回排入调用。缺数据时等待后续接线，不清空世界、不把未知填成空气，也不凭另一个未经核对的读路径覆盖结果。SDK 还有其它体素查询类型时，以当前 Engine XML 为准；本页不编写 Sample 没有展示的 `IVoxelGameplayQueries` 或批量读取签名。
 
 ## 查询形状与结果
 
-`IVoxelPhysicsQueries` 使用 `VoxelWorldPoint(float X, float Y, float Z)`：
-
-| 调用 | 输入含义 | 返回中必须检查的字段 |
-| --- | --- | --- |
-| `Sweep(center, halfExtents, displacement)` | 沿位移扫过轴对齐盒 | `Unresolved`、`Collided`、`TravelFraction` |
-| `Raycast(origin, direction, maxDistance)` | 射线方向和距离上限 | `Resolution`、`Collided`、`TravelDistance` |
-| `Overlap(center, halfExtents)` | 轴对齐盒重叠 | `Resolution`、`ActualCount`、`Truncated` |
-
-盒的三个半长分量必须有限且严格大于零。射线输入应是有限值、有效方向和合理距离；具体上下限使用当前 SDK 文档。`Overlap` 截断时不能把 `ActualCount` 当全量计数。这里的 Raycast 结果没有命中格坐标或法线字段；选格系统不能凭空读取 `hit.SectionKey` 或 `hit.Normal`，应使用已交付的更完整查询面或项目现有的目标格解析。
-
-本例只计算一个盒体允许前进的比例，调用方在自身移动逻辑中使用结果：
+Sample 已公开的物理接缝在 [`Gameplay/Abilities/MoveAbility.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Abilities/MoveAbility.cs)：`MoveAbility.CanActivate` 先取得 `IAbilityPhysicsPort`，再用配置中的半径调用 `SweepBox`。以下是该文件的实际片段：
 
 ```csharp
-using System;
-using Lumio.GameRuntime.Coordination;
-
-public static class TerrainMotion
+if (owner.Physics is not IAbilityPhysicsPort physics)
 {
-    public static bool TryMeasureTravel(
-        IVoxelPhysicsQueries physics,
-        VoxelWorldPoint center, VoxelWorldPoint halfExtents,
-        VoxelWorldPoint displacement, out double fraction)
-    {
-        fraction = 0;
-        VoxelSweepHit hit = physics.Sweep(center, halfExtents, displacement);
-        if (hit.Unresolved) return false;
-        if (!double.IsFinite(hit.TravelFraction) ||
-            hit.TravelFraction < 0 || hit.TravelFraction > 1)
-            throw new InvalidOperationException("体素扫掠返回无效比例。");
-        if (!hit.Collided && hit.TravelFraction != 1)
-            throw new InvalidOperationException("已解析的未命中结果必须允许完整行程。");
-        fraction = hit.TravelFraction;
-        return true;
-    }
+    failureCode = "physics_unavailable";
+    return false;
 }
+float step = (float)SampleConfigBinding.For(owner.World).Movement.StepMeters;
+float radius = (float)SampleConfigBinding.For(owner.World).Movement.SweepRadiusMeters;
+LogicTransform logic = owner.Get<LogicTransform>();
+Vector3 origin = logic.LocalPosition;
+Vector3 displacement = new(input.Dx * step, 0f, input.Dz * step);
+AbilitySweepHit hit = physics.SweepBox(origin, displacement, new Vector3(radius));
 ```
 
-`Unresolved` 是地形在本次查询切面中不足以回答，不能作为 `Miss`、`Hit` 或空气使用。查询本身不等于请求加载；不能靠循环重查强迫地形出现，也不能用另一次格读取否定物理查询的 `Unresolved`。交给 Host 的驻留/流式加载策略后，在后续时机再尝试。
+随后 Sample 检查 `AbilitySweepHit.TravelFraction` 是否为有限的 `0..1`、未碰撞时是否为完整行程，并检查 `Point` 与计算出的下一位置一致；不一致会保留故障而不是当作未命中。盒体输入必须来自有限的 `LogicTransform`、配置半径和有效位移。角色等实体碰撞仍由 ECS/Runtime 侧处理，玩法不要安装空物理端口或捕获所有异常。
+
+`Unresolved`、`physics_unavailable`、`physics_invalid_query`、`physics_shape_unsupported` 等具体错误以 Engine v0.0.2 公共 XML/错误码参考为准；查询未能回答时不能把它当 `Miss`、`Hit` 或空气。查询本身也不等于请求加载，交给 Host 的驻留策略后在后续时机再尝试。
 
 ## 接到 GAS 移动前先核对形状
 
-`Lumio.GameRuntime.Gas.IAbilityPhysicsPort.Sweep(Vector3 origin, Vector3 displacement, float radius)` 声明的是球体扫掠。它与上述 AABB 扫掠既有形状差异，也有结果差异：`AbilitySweepHit` 没有 `Unresolved` 字段。
+Sample 通过 `IAbilityPhysicsPort` 的 `SweepBox(origin, displacement, new Vector3(radius))` 走 GAS 的 AABB 扫掠入口；Engine v0.0.2 的 Runtime Host 负责把真实体素适配器绑定到 Ability 组件。玩法不安装空实现或自行捕获所有异常。
 
-用 `halfExtents=(radius,radius,radius)` 调 AABB 查询不能获得等价球体碰撞。返回 `AbilitySweepHit(false, 1, ...)` 也不能表达未知地形。若 SDK 尚未交付保留形状和未知态的适配器，应明确报告接缝缺失，保持这次移动被拒绝并暴露诊断，不自行写碰撞内核或静默安装测试替身。
-
-Sample 当前 `SampleGameplay` 会装配 `RecordingAbilityPhysicsPort`，它返回无碰撞；`MoveAbility.Execute` 还存在 `catch (Exception)`。这两处可用于了解调用位置，但不构成真实地形阻挡证明，也不是新游戏应复制的异常处理模板。
+`SweepBox` 的结果可能是已命中、未命中或由 `AbilityPhysicsRejectedException` 明确拒绝。`physics_unavailable`、`physics_unresolved`、`physics_invalid_query` 与 `physics_shape_unsupported` 需要保留原码；未知地形不得伪装成未命中。第五步准入失败发生在扣费、冷却和执行条目之前，普通业务拒绝只结束这一次移动。
 
 ## 如何确认接通
 
-至少观察：已加载空地完整通过、已加载墙体限制行程、未就绪区域拒绝当前查询、无效形状保留具体错误。同一场景分别确认 Server 与 Client Replica 使用正确世界。替身测试只证明游戏分支，真实地形效果需相应 Native/Host 运行证据，记录 SDK 身份、地图版本、操作和查询结果。
+至少观察：已加载空地完整通过、已加载墙体限制行程、未就绪区域拒绝当前查询、无效形状保留具体错误。同一场景分别确认 Server 与 Client Replica 使用正确世界。测试端口只证明游戏分支，真实地形效果需相应 Native/Host 运行证据，记录 SDK 身份、地图版本、操作和查询结果。
 
-公开阅读入口：[Sample 物理端口装配](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/src/Lumio.Sample.Gameplay/SampleGameplay.cs)、[移动技能调用位置](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/src/Lumio.Sample.Gameplay/Abilities/MoveAbility.cs)。
+公开阅读入口：[Sample 移动技能](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Abilities/MoveAbility.cs)、[服务端 Host 绑定说明](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/SampleGameplay.Server.cs)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

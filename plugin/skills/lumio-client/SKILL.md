@@ -32,3 +32,5 @@ description: 使用 Lumio SDK 开发游戏客户端、编译客户端玩法、�
 - 不以自动恢复上一帧、重放结果未知的操作或吞异常掩盖操作错误。正常断线后的新票重连、显式存读档和客户端预测重建各有独立语义；见排障文档。
 - `started`、`connected`、`admitted` 是三个不同阶段。上行成功也不等于服务器已经应用。
 - 当前示例与 Host 有未接通能力；按实际词表的 `Available` / `BlockedReason` 判断，不按类名存在与否猜测。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

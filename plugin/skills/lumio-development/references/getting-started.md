@@ -1,73 +1,104 @@
 # 环境与第一步
 
-目标：取得可用的项目入口，确认开发环境和产物身份，再做第一次可验证改动。
+这一页说明怎样拿到与 **Engine v0.0.2** 匹配的示例、验证工具链，再开始写玩法。
 
-## 1. 先确认拿到了什么
+## 1. 准备工具和发布物
 
-| 输入 | 用途 | 缺失时 |
-| --- | --- | --- |
-| 公开 LumioSample 模板 | 玩法声明、配置样例、测试和启动器 | 可以直接 clone |
-| 匹配的 `Lumio.Engine.SDK` 包与依赖 | 构建 C# 玩法，携带 Native 及公开使用说明 | 向发行方取得分发物或 feed；不临时实现引擎接口 |
-| DS 分发物及匹配 Bot/客户端产物 | 真正启动双端 | 可以阅读与做局部工具验证，不能宣称双端跑通 |
-| 账号服务配置与自己的测试账号 | 换取真实准入票 | 不在示例中自行伪造生产票据 |
-
-2026-09-14 查询公共 NuGet `lumio.engine.sdk` 索引返回 404。模板当前使用 `0.1.0`，这不是已发布到公共 feed 的证明。需要分发物的步骤在取得它后执行；不要求外部使用者 clone 私有引擎源码。
-
-开发环境按项目 `global.json`、依赖与工具声明安装：核对版本的 Sample 使用 .NET 10，Node 启动脚本使用 Node 22，配表 CLI 使用 Python 3.11+。Rust 编译器不是使用已分发 SDK 的默认前提。
+公开 Sample 的学习路径需要 Git、.NET SDK、Node 和 Docker。先在目标机器检查版本：
 
 ```sh
+git --version
 dotnet --version
 node --version
-python3 --version
+docker --version
 ```
 
-这些命令只确认工具可调用，不证明游戏能运行。
+Sample 的 C# 工程目标是 .NET 10；Node 脚本由仓库自己的 `package.json`/脚本约束版本。命令可调用只证明工具存在，不证明账号、平台、DS 或客户端发布物可用。真实双端还需要与游戏程序集同一版本的 Engine Release、Bot/客户端宿主、平台 launch 配置和测试账号。
 
-## 2. 取得模板
+## 2. 取得示例和 Engine
+
+从公开仓库递归 clone，Engine 子模块会固定到游戏提交声明的发布物：
 
 ```sh
-git clone https://github.com/LumioGames/LumioSample.git my-game
+git clone --recursive https://github.com/LumioGames/LumioSample.git my-game
 cd my-game
 git rev-parse HEAD
+git submodule status Engine
 ```
 
-先保留模板名称完成第一轮验证。重命名项目时再一起修改程序集名、namespace、生成器配置、测试引用和服务器程序集路径，避免只改文件夹名。
-
-有 SDK 本地 feed 后，在项目目录执行（把路径换成实际分发目录）：
+如果已经 clone 但 `Engine/` 为空：
 
 ```sh
-dotnet restore LumioSample.slnx -p:LumioLocalFeed=/absolute/path/to/feed
-dotnet build LumioSample.slnx --no-restore -p:LumioLocalFeed=/absolute/path/to/feed
-dotnet test LumioSample.slnx --no-build -p:LumioLocalFeed=/absolute/path/to/feed
+git submodule update --init --depth 1 Engine
 ```
 
-Windows 同样传 `-p:LumioLocalFeed=C:/path/to/feed`。保留已有 NuGet 源以便解析其它依赖；feed 不只包含一个名字正确但依赖不全的 zip。模板会探测同级源码目录；要验证外部包路径，使用没有同级引擎源码的独立目录，并检查输出确实采用包依赖。
+不要再使用 `-p:LumioLocalFeed=` 指向旧的本地 NuGet feed。当前 Sample 的 `Directory.Build.targets` 只从 `Engine/` 子模块读取 `manifest.json` 和 `sdk/` 下的 `Lumio.Engine.SDK.<version>.nupkg`；缺失时会明确报 `LUMIO_SDK_UNRESOLVED`。
 
-核对版本的模板只有在识别到本地 feed 中的 SDK nupkg 或已恢复的 SDK 包时才注入包引用；不能假定加一个空 feed 就能首次从网络恢复。模板给出 `LUMIO_SDK_UNRESOLVED` 时按报错确认实际文件、包版本和目录。
+### 升级引擎
 
-成功标准：restore/build 退出 0、测试实际发现并执行用例、输出目录包含配置与实际宿主需要的程序集。禁止以“输出目录里已有 DLL”代替本次构建成功。
+升级引擎只使用 Sample 提供的脚本。脚本会检查发布物再切换子模块指针：
 
-**本次试跑的具体限制：**模板 `b236d2e` 与本机缓存的 SDK `0.1.0` 组合 restore 成功，但 build 报 `NETSDK1022`，三个生成的配置 Reader 被重复计入编译。该缓存包仅包含 SDK targets，缺少模板预期的 props；这不是所有同版本包都已证明会失败。请取得与模板匹配的完整分发组合并重新验证，不手改生成文件或关闭默认编译项来制造成功。包哈希与验证范围见 [验证记录](../../../VERIFICATION.md)。
+```sh
+node Tools/update-engine.mjs <版本>
+# 例如：
+node Tools/update-engine.mjs 0.0.2
+```
 
-## 3. 做第一个小改动
+## 跑示例十四步导览
 
-建议先在 Sample 的聊天服务器实现中调整一条日志文案，保留共享 RPC 签名，然后重新构建。具体入口见 [项目布局](project-layout.md)。
+先验证游戏侧编译和生成文件：
 
-- 构建成功：只证明该端源码和生成结果可编译。
-- 单元测试成功：只证明测试覆盖的逻辑。
-- 启动 DS 与两个客户端后发送消息，发送方、服务器、接收方均有对应记录：才证明这次聊天链。
+```sh
+dotnet build LumioSample.slnx
+```
 
-需要真实运行时转到 [服务器](../../lumio-server/SKILL.md) 与 [客户端](../../lumio-client/SKILL.md)。首次准备双端环境不要同时改 SDK 版本、协议与玩法，先建立可对比的运行基线。
+共享玩法位于 `Gameplay/`；服务端、客户端和 Bot 的实际工程分别在 `Gameplay/Lumio.Sample.Gameplay.csproj`、`Client/Bots/Lumio.Sample.Bots.csproj`。不要把输出目录里的旧 DLL 当作本次构建证据。
 
-## 4. 找公开 API
+完整导览的唯一入口是 `Tools/launcher.mjs`，它启动 Platform、DS 和 C# Bot，输出十四个 `step=NN` 结果，并在第十四步重启同一存档验证恢复。准备好 Docker、Engine 发布物、平台配置和场景程序集后运行：
 
-SDK nupkg 中的 `content/docs/public-api.md`、`content/docs/error-codes.md`、`content/wire/` 与 `lib/` 下 XML 是包使用面的参考。可用归档工具查看 nupkg，不修改缓存中的文件。程序集文件名中带 `NativeLoader` 不代表应手写 P/Invoke 或直接改函数表。
+```sh
+node Tools/launcher.mjs --bots 2 \
+  --scenario-dll Client/Bots/bin/Debug/net10.0/Lumio.Sample.Bots.dll
+```
 
-以拿到的包版本核对入口与示例；缺某接口时明确记录差异，不能凭另一个版本的签名猜调用。
+`Tools/launcher.mjs` 缺少 Engine、Platform、Bot.Host、准入票或场景 DLL 时会明确标记 `BLOCKED_ENV`；这属于缺运行环境，不应改成“通过”。每个 Bot 使用自己的 launch 票；不要把普通账号凭据放进 URL、仓库或日志。
 
-## 来源与验证范围
+### 十四步逐步索引
 
-- [Sample 的依赖与生成配置](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/Directory.Build.targets)
-- [Sample 工具版本](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/global.json)
-- SDK 公开可获取性查询：2026-09-14；后续以发行方实际分发为准。
-- 本手册的具体执行证据见 [验证记录](../../../VERIFICATION.md)。本页不声称完整 Sample 场景已通过。
+下面的名称和顺序来自 [`Tools/tour-steps.mjs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/tour-steps.mjs)。每一步的原始证据保存在 `.run/` 下的 DS 日志、Bot `result.ndjson` 和启动器摘要中；启动器被强制清理的进程不算通过。
+
+| 步骤 | Sample 名称 | 阅读入口 |
+| --- | --- | --- |
+| 01 | 编译配表 (`compile-config`) | [配置导出](../../lumio-config/references/edit-and-export.md) |
+| 02 | 注册登录 (`account-login`) | [服务器配置](../../lumio-server/references/setup.md) |
+| 03 | 起 DS (`start-ds`) | [服务端开发](../../lumio-server/references/development.md) |
+| 04 | 进房间 (`admit-room`) | [客户端搭建](../../lumio-client/references/setup.md) |
+| 05 | 加载底图 (`load-basemap`) | [世界与地图](../../lumio-voxel/references/world-and-maps.md) |
+| 06 | 玩家入场 (`spawn-player`) | [实体与组件](../../lumio-gameplay/references/entities-and-components.md) |
+| 07 | 跑动 (`move`) | [体素查询](../../lumio-voxel/references/queries.md) |
+| 08 | 聊天 (`chat`) | [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md) |
+| 09 | 挖掘 (`mine`) | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 10 | 矿脉储量 -1 (`vein-reserve`) | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 11 | 方块变空气 (`cell-to-air`) | [体素写入](../../lumio-voxel/references/mutations.md) |
+| 12 | 掉出矿石 (`ore-drop`) | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 13 | 拾取 (`pickup`) | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 14 | 存档重启 (`save-restore`) | [保存与重启验证](../../lumio-server/references/development.md#保存与重启验证) |
+
+## 查公开参考
+
+Engine v0.0.2 随包提供程序集 XML（例如 `Lumio.Engine.SDK.xml`、`Lumio.GameRuntime.Ecs.xml`、`Lumio.GameRuntime.Gas.xml`）和公开 wire/契约文件。以实际发布物中的 XML、README 和 Sample `Tools/` 为准核对精确签名；不要从私有引擎仓或旧文章猜 API。常见体素码见 [按症状查错误码](diagnostics.md#按症状查错误码)，完整表见 [SDK 包目录](https://github.com/LumioGames/LumioEngineRelease/tree/v0.0.2/sdk) 中的 `content/docs/error-codes.md`。
+
+## 5. 从一个小改动开始
+
+推荐先阅读 `Gameplay/Components/Chat/ChatComponent.cs` 与对应的 `.Server.cs`/`.Client.cs`，只改变一处服务端日志或 UI 文案，再重新构建。构建通过只证明编译；要证明聊天送达，需要两个独立连接并在服务器和接收方日志中对齐同一条消息。
+
+## 证据边界
+
+- **能力不存在**：发布物没有所需类型或命令，记录为上游缺口。
+- **尚未接线**：代码声明存在，但宿主没有提供对应运行输入。
+- **缺运行环境**：缺 Docker、Platform、Engine 或票，导览停在具体步骤并标 `BLOCKED_ENV`。
+- **本次未验证**：没有实际执行的命令，不写成通过。
+
+公开核对基线、命令结果和 Sample 路径表见 [验证记录](../../../VERIFICATION.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

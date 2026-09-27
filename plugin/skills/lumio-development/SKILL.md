@@ -14,6 +14,7 @@ license: MIT
 | --- | --- |
 | 首次使用、SDK 找不到、准备公开模板 | [环境与第一步](references/getting-started.md) |
 | 新文件放哪里、双端代码如何拆、如何生成声明 | [项目布局与规范](references/project-layout.md) |
+| 写实体、组件、同步、GAS、Tick | [共享 Gameplay](../lumio-gameplay/SKILL.md) |
 | 想知道能力是否存在、入口和限制 | [能力与证据范围](references/capabilities.md) |
 | 连接、加载、同步或执行结果异常 | [日志与分层定位](references/diagnostics.md) |
 
@@ -31,8 +32,11 @@ license: MIT
 
 - [客户端](../lumio-client/SKILL.md)：输入、连接、同步、表现及调试。
 - [服务器](../lumio-server/SKILL.md)：宿主、世界、玩法、存档及调试。
+- [共享 Gameplay](../lumio-gameplay/SKILL.md)：实体、组件、同步、技能、Tick 和代码生成。
 - [体素](../lumio-voxel/SKILL.md)：地图、读写与物理查询。
 - [配置表](../lumio-config/SKILL.md)：表源到双端 Reader。
 - [美术](../lumio-art/SKILL.md)：需求、制作、交接与接入验收。
 
 这些指引提供开发方法，不代表已获准推送代码、发布服务或操作生产数据；执行范围以当前用户任务为准。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

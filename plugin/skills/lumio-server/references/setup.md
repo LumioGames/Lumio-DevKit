@@ -2,48 +2,61 @@
 
 ## 前置产物
 
-本指南核对日期为 2026-09-14。SDK 包取得见 [开始开发](../../lumio-development/references/getting-started.md)。还需要分发方交付目标 OS/架构的 `lumio-ds`、Native 库与身份 sidecar、托管 HostEntry 及运行配置、匹配的 .NET/hostfxr。它们不能由“已有游戏 DLL”推断存在。
+本指南按 `LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb` 与 Engine v0.0.2 核对。公开 Sample 通过只读 `Engine/` 子模块取得一整套引擎发布物，不要求访问私有仓库。前置条件是 git、项目 `global.json` 要求的 .NET SDK、Node.js 22 和 Docker（本地 Platform）。
 
-另需服务器侧游戏程序集及配套 Runtime 依赖、生成注册表、编译后的配置 export、底图/存储方案，以及平台给出的 allocation 和准入验签公钥。不要用客户端拿到的票反向编造服务器身份。缺少 DS 或平台分发时，可以完成游戏编译和配置审阅，真实运行应标记受阻。
+Engine v0.0.2 的发布物包含 SDK 包、`server/<rid>/lumio-ds`、`server/<rid>/Application/`、`server/<rid>/SDK/Managed/`、`server/<rid>/SDK/Native/<rid>/`、Bot 宿主、Web 共享零件和 Platform compose。先确认 `Engine/manifest.json` 的版本和本机 RID，再运行：
 
-## 从分发模板开始
+```sh
+node Engine/tools/verify-release.mjs --root Engine --rid <rid>
+```
 
-在分发目录复制随包的 `server.example.json` 为本次运行的 `server.json`。公开 [Sample 配置样本](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/server.sample.json) 可用来理解配置用途，但不能原封不动启动：它包含待替换的房间身份和公钥，部分 CLR 路径也必须按实际 Host 产物修正。
+缺少子模块时补拉：
 
-所有相对路径以 **server.json 所在目录** 为基准；移动配置文件后要重新检查路径。
+```sh
+git submodule update --init --depth 1 Engine
+```
+
+验证脚本返回 exit 1 时记录 `sdk_version_mismatch`/发布物不一致并停止；缺少发布物或 manifest 没有本机平台（exit 2）才记录 `BLOCKED_ENV`。不拿其他平台凑运行条件。
+
+## 从 Sample 模板开始
+
+Sample 的运行模板是 [`Server/Config/Startup/server.json`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Server/Config/Startup/server.json)。相对路径均以该文件所在目录为基准；本地覆盖写入已忽略的 `.run/`，不要改提交的模板来放凭据。
 
 | 配置 | 如何填写/核对 |
 | --- | --- |
-| `allocation` | 平台/运维分配的 `serverAudience`、`gameId`、`gameReleaseId`、`contractId`、`roomId`、`allocationId`，与房间票一致。 |
-| `admission_key_id` / `admission_public_key_hex` | 对应平台签发密钥；公钥为 32 字节的 64 位十六进制文本。不能把测试值作为真实验签配置。 |
-| `clr.engine_native` / `clr.hostfxr` | 当前平台的 Native 引擎与 .NET hostfxr 文件。 |
-| `clr.assembly` / `clr.runtime_config` | 分发包实际的 `Lumio.Server.EntityChat.HostEntry.dll` 与对应 runtimeconfig；不能因为游戏 DLL 存在就将其用作 HostEntry。 |
-| `clr.entry_type` / `clr.entry_method` | 当前 HostEntry 是 `Lumio.Server.EntityChat.HostEntry.HostEntry, Lumio.Server.EntityChat.HostEntry` / `LumioEntityChatEntry`。 |
-| `clr.replication_assembly` / `clr.ecs_assembly` / `clr.registry_assembly` | 同一兼容发布的 Runtime Replication、Ecs 与服务器玩法注册表程序集；不要指向客户端输出。 |
-| `config_dir` | LumioConfig export 根，包含 `manifest.json`；`contentFingerprint` 从清单读取，不手填 `content_fingerprint`。 |
-| `world_profile` | 显式为 `runtime-only` 或 `runtime+voxel`；Sample 使用后者，缺体素接入不能用改 profile 掩盖。 |
-| `store_path` | 当前房间的检查点目录。首次试跑用明确的新目录；已有目录会触发当前程序的启动恢复路径。 |
-| `base_map_id` / `base_map_version` / `base_map_content_sha256` | 与实际底图一致的身份和 SHA-256。哈希字段不等于底图文件已被加载；保留内容的实际装载证据。 |
-| `durability` | `snapshot_only`、`async` 或 `durable`；当前以检查点组为单位，不能据名字推断逐操作 WAL 已接通。`durable` 的支持受平台限制。 |
-| `logging` | 五键均填写：`dir`、`min_level`、`file_size_mb`、`retention_days`、`mailbox_capacity`。具体范围见排障文档。 |
+| `allocation` | Platform/运维分配的 `serverAudience`、`gameId`、`gameReleaseId`、`contractId`、`roomId`、`allocationId`，与房间票一致。 |
+| `admission_key_id` / `admission_public_key_hex` | 对应 Platform 签发密钥；公钥为 32 字节的 64 位十六进制文本。不能把测试值作为真实验签配置。 |
+| `clr.entry_type` / `clr.entry_method` | Engine v0.0.2 的入口是 `Lumio.Server.HostEntry.HostEntry, Lumio.Server.HostEntry` / `LumioHostEntry`。 |
+| `clr.registry_assembly` | 本次构建的 `Gameplay/bin/<Configuration>/net10.0/Lumio.Sample.Gameplay.dll`；不要指向客户端输出。 |
+| `config_dir` | `Server/Config/Tables/` 或相同发布生成的 export 根，必须含 `manifest.json`。 |
+| `world_profile` | Sample 使用 `runtime+voxel`；缺少体素世界时不要改成 `runtime-only` 掩盖缺件。 |
+| `store_path` | 当前房间的新检查点目录；复用旧目录会触发启动恢复。 |
+| `base_map_id` / `base_map_version` / `base_map_content_sha256` | 与 `Server/Assets/Maps/sample.voxel` 及其版本和 SHA-256 一致。哈希字段不等于底图已加载。 |
+| `durability` | Sample 使用 `snapshot_only`；不能凭名字推断逐操作 WAL。 |
+| `logging` | 填写 `dir`、`min_level`、`file_size_mb`、`retention_days`、`mailbox_capacity`。 |
 
-`runtime+voxel` 的托管输出还需包含 net10.0 的 `Lumio.GameRuntime.Simulation.dll`，提供 `DedicatedServerHostBinding`。若分发物缺失，报告缺件；不能用不含该类型的程序集或虚构句柄替代。
+`Gameplay/` 是两端共享玩法；`Server/` 只放服务端配置、配表、地图和测试；引擎宿主和 Native 从 `Engine/server/<rid>/` 取。缺少 `Lumio.GameRuntime.Simulation.dll` 或 `DedicatedServerHostBinding` 时报告缺件，不制造替身。
 
 ## 校验与启动
 
-下例在已解包的 DS 目录执行。Windows 使用对应 `.exe`；路径必须根据实际分发包调整。
+下例在 Sample 根目录执行：
 
 ```sh
-./lumio-ds --config server.json --check-config
-./lumio-ds --config server.json
+node Engine/tools/verify-release.mjs --root Engine --rid <rid>
+node Tools/launcher.mjs --bots 2 --stagger-ms 250 --scenario-dll Client/Bots/bin/Debug/net10.0/Lumio.Sample.Bots.dll
 ```
 
-第一条预期打印 `configuration_valid` 并退出 0。它只校验 JSON 字段、范围与配额关系，不打开配表、加载 Native 或验证程序集。多余/旧键会被拒绝，例如 `content_fingerprint`、`host.tick_hz`。
+`Tools/launcher.mjs` 会按十四步导览准备 Platform、DS 和 Bot。只要依赖不齐就逐步打印 `BLOCKED_ENV` 并点名路径；没有完整分发物时不要启动替代服务器制造通过。
 
-第二条会创建日志并初始化运行环境。只有出现 `DS_READY` 才能继续连接，核对 JSON 中 `endpoint`、`roomId`、`gameReleaseId`、`tickRate`、`worldProfile`、`contentFingerprint`；`listen_port=0` 时使用它实际报告的端口。TCP/WS 端口已监听不能替代 Ready。
+若需单独检查 DS，使用发布物中的 `lumio-ds` 和 Sample 的配置模板：
 
-初次本地运行保留 loopback 监听。真实 Native/Bot 在 WebSocket Upgrade 中提交 `Authorization: Bearer <房间准入票>`；浏览器使用提供的适配器，以 `lumio-admission.<票>` 子协议 offer 携带票，服务端仅选择 `lumio.mvp.v0`。不要在 URL 传票。普通账号登录凭证尚未绑定房间，不能用于 DS 准入。
+```sh
+Engine/server/<rid>/lumio-ds --config Server/Config/Startup/server.json --check-config
+Engine/server/<rid>/lumio-ds --config Server/Config/Startup/server.json
+```
 
-## Hello 不等于正式 DS
+第一条只校验 JSON 字段、范围与配额关系；第二条需要出现 `DS_READY` 才能继续连接。端口已监听不能替代 Ready。真实准入必须使用 Platform 签发的房间票，不把票放入 URL、版本库或示例命令文本。
 
-Hello/replay/免认证 observer 属于显式测试 harness。看到 Hello 文本往返，不表示当前游戏的注册表、平台验票或 `runtime+voxel` 已工作。公开 [Sample 启动器](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/integration/README.md) 还依赖未公开的环境，当前不能承诺从公开 clone 一键完成十四步。缺件就停在具体步骤，不启动替代服务器制造通过。
+公开阅读：[Sample README](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/README.md)、[启动模板](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Server/Config/Startup/server.json)、[一键启动器](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/launcher.mjs)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

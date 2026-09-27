@@ -1,52 +1,35 @@
 # 能力入口与当前证据范围
 
-这张表帮助你选入口，不维护第二套任务进度。核对日期 **2026-09-14**；精确 API 以使用中的 SDK 包为准，运行证据必须对应实际产物。
+核对日期为 **2026-09-27**；精确签名以实际使用的 Engine v0.0.2 XML 为准。接口、生成物和真实运行是三种不同证据。
 
-## 先判断世界里是什么
+## 世界里只有两种东西
 
-- 不动、没有服务器逻辑的地形：体素。
-- 会动或需要服务器逻辑的角色、掉落物：实体。
-- 只在客户端显示的火花、提示等：Local Entity。
-- 固定位置但有库存等逻辑的物件：体素占格、实体持逻辑，通过公开绑定关联。
+- 静态、不动、没有服务器逻辑的地形是体素。
+- 会动或需要服务器逻辑的角色、矿脉、掉落物是实体。
+- 只在客户端显示的火花、提示等是 Local Entity。
+- 固定占格但有库存的箱子：占格是体素，库存和开关逻辑是实体，两者靠稀疏引用关联。
+- 技能、冷却、属性、效果和预测都由实体上的 GAS 组件承载；Sample 没有 Gameplay Tags 声明，标签能力以 Engine v0.0.2 的公开 XML/API 为准。
 
-GAS 依附实体管理技能、效果与预测。表现坐标与逻辑状态不能各自成为服务器权威；材质的外观也不能替代碰撞属性。
+## 找入口
 
-## 找能力
-
-| 需求 | 使用入口 | 当前可确认的范围与限制 |
+| 需求 | 公开入口 | 证据边界 |
 | --- | --- | --- |
-| 声明实体与组件 | SDK ECS 声明、注册表生成；Sample EntityTypes/Components | 公开模板有声明和双端生成路径；创建、上线、同步仍需实际 Host 运行证明 |
-| 技能、属性、消耗和效果 | GAS，Sample Abilities/Effects | 有公开声明与消费代码；模板移动物理仍有测试装配，不能直接当完整真实碰撞示范 |
-| 客户端连接、聊天与同步 | 分发的客户端/Bot；[客户端](../../lumio-client/SKILL.md) | 启动进程、完成准入、收到实体、正确表现是不同结果；部分玩法输入路径尚有限制 |
-| 服务器世界与存档 | 分发的 DS、游戏配置；[服务器](../../lumio-server/SKILL.md) | 要匹配 Native 与 Managed 产物；一次 Hello 测试不证明完整游戏或所有耐久档 |
-| 体素读写、绑定与地形查询 | SDK 体素公开面；[体素](../../lumio-voxel/SKILL.md) | 接口和适配存在；宿主必须提供真实世界及查询绑定，未就绪不等于空气；球与 AABB 不等价 |
-| 配表导出与类型读取 | 公开 Config CLI + SDK Loader；[配置表](../../lumio-config/SKILL.md) | 工具可独立使用；读取需正确端投影、Reader 与 Loader，文件导出不等于运行世界已切换 |
-| 定时、状态机、空间查询 | SDK 对应 facade；包内公开参考 | 有公开包装与消费者；测试用 ABI 实现不等于 Native 联测，不在玩法层另造迁移或计时算法 |
-| 美术制作与交接 | [美术](../../lumio-art/SKILL.md) | 指引提供工作流；具体资源格式、导入器、预算按目标客户端实际能力确认 |
+| 实体、组件和本地实体 | `Gameplay/EntityTypes/**`、`Gameplay/Components/**`、ECS XML | Sample 有声明和生成输出；创建、复制和表现仍需 Host 运行证据 |
+| 同步与 RPC | `.Server.cs`/`.Client.cs`、生成的 Sync/Registry | 字段的 Scope 由 Runtime 解释；代码存在不等于客户端已收到 |
+| 技能与预测 | `Gameplay/Abilities/**`、`Gameplay/Effects/**`、GAS XML | `MineAbility` 的地形预测与 `PickupAbility` 的权威效果有真实声明；回滚是否接通要看运行结果 |
+| Tick 与系统 | `Gameplay/SampleMiningSystem.Server.cs`、Simulation XML | 系统顺序以发布物 Tick 合同为准；单元测试不证明跨进程时序 |
+| 体素读写和查询 | `lumio-voxel` skill、Engine XML | `BlockId` 是 `uint`；Pending/Unavailable/Unresolved 不能当空气 |
+| DS 与存档 | `Server/Config/Startup/server.json`、`Tools/launcher.mjs` | 需要同一版本的 DS、HostEntry、Runtime、Native 和存储目录 |
+| 方块资产 | `Client/Assets/Blocks/`、`Tools/check-block-assets.mjs` | 资产契约和检查器可静态核对；实际 WebGL2 画面仍需运行验证 |
+| 配表 | LumioConfig CLI 与 `Server/Config/Tables`/`Client/Config/Tables` | 导出和 Reader 成功不等于 DS 已激活该快照 |
 
-模板不是“所有功能已完成”的证据。发现 `Recording`/`Fake` 等实现时追到实际构造和注入处，不凭类名推断生产正在使用，也不凭接口存在推断宿主已经注入。
+### 四种限制措辞
 
-## 每次验证把结论说具体
+- **能力不存在**：Engine v0.0.2 没有该公开类型或命令。
+- **尚未接线**：Sample 有声明，但 Host/消费者没有提供运行输入。
+- **缺运行环境**：缺 Docker、Platform、Engine 产物或准入票。
+- **本次未验证**：没有执行对应命令或场景。
 
-用普通句子记录以下事实，不需要新增成熟度编号：
+不要用 `Recording`、`Fake` 或“有一个接口”推断生产能力；追到实际构造、注入和日志。完整验证命令见 [验证记录](../../../VERIFICATION.md)。
 
-- “签名已在所用 SDK 中找到”——说明包版本和入口。
-- “游戏已调用并注入真实提供方”——说明实例、端和装配位置。
-- “局部测试执行通过”——写命令、用例数量以及替身范围。
-- “双端场景运行通过”——写输入、观察结果和实际二进制身份。
-- “本机尚未取得 Bot 分发物，双端未执行”——保持未知，不写通过。
-
-普通业务拒绝反馈本操作，不自动停止其他玩家。内部异常、发布结果未知和已提交后的通知错误应保留原身份及提交事实；不要用自动重试、回滚上一帧或返回成功来掩盖问题。旧包可能尚未实现这条行为边界，出现差异时记录版本与反例并报告维护方。
-
-## 资料与证据的分工
-
-手册解释使用方法；SDK XML/公开参考定义该版本的调用面；测试与运行报告证明具体行为。某一层不能替代其它层。
-
-阅读基线：
-
-- [Sample b236d2e](https://github.com/LumioGames/LumioSample/tree/b236d2e12206dd1f5b12a9958810d92c2f49f13c)
-- [Config f0dba85](https://github.com/LumioGames/LumioConfig/tree/f0dba85efc2a3935fa0ab18c643d49523166ff4e)
-- [Game 导航](https://github.com/LumioGames/LumioGame)
-- [本插件验证记录](../../../VERIFICATION.md)
-
-以上固定引用是本次阅读证据，不要求游戏把依赖锁到这些提交。后续更改应重新核对相关段落，避免把旧样例缺口继续当新版本事实。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

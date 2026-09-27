@@ -48,3 +48,5 @@ rg '"kind":"(vocabulary|issue|assert|run)"' .run/chat-once/result.ndjson
 数据校验、权威应用或必要预测重建失败时，立即禁输入、停止发布并最终释放当前游戏 Session，不触发上述自动重连；仍有效的平台账号会话可以保留，用户手动重新进入时创建新 Session。正常退出或同账号接管也不触发自动恢复。客户端预测重建本身仍是 Runtime/GAS 的独立正常机制，不能因为禁止错误兜底就一并禁止。
 
 自建 Host 调用 `IClientSession.Dispose()` 后仍需在原 owner 循环继续 Tick，读取快照 `CleanupStatus` / `IsDisposed` 确认释放完成，再释放 Native 资源。清理失败时保留未释放证据，不自动开新代；不得用跨线程补 Tick 或直接卸载 Native 库处理卡顿。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

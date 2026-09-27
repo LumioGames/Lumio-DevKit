@@ -33,3 +33,5 @@ SDK 和通用项目结构见 [Lumio 开发](../lumio-development/SKILL.md)。公
 - 存档损坏或版本不符时保留原始目录与首次错误；不删数据、不拼接不同检查点来制造成功。
 - Hello、免认证 observer 与 test harness 是有限验证入口；正式连接使用平台房间票和 `lumio-ds`。
 - 需要公网运行时使用已有受控 WSS 边缘与准入配置，完成具体部署准备后再按授权范围执行。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

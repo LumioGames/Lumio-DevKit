@@ -1,6 +1,6 @@
 # 修改数值、校验与生成
 
-以下命令在 LumioConfig checkout 根执行；把 `python3` 绑定到 Python 3.11 以上（Windows 可使用 `py -3.11`）。示例核对基于 `f0dba85`，2026-09-14 在独立临时 checkout 实际执行通过。
+以下命令在 LumioConfig checkout 根执行；把 `python3` 绑定到 Python 3.11 以上（Windows 可使用 `py -3.11`）。示例核对基于 `origin/main@dd127edd87a00764b2b3ffb210df9f4b8d44d70a`；本轮未在 handbook 工作区执行 LumioConfig CLI。
 
 ```bash
 python3 --version
@@ -42,7 +42,7 @@ python3 tools/lumio_config.py format --check
 python3 tools/lumio_config.py export --out build/after --csharp-out build/readers-after
 ```
 
-任一步返回非零退出码就停止，不继续应用或替换产物。本版本实测：`step_meters=-1` 能通过 `patch validate`，但 `preview` 返回 `RANGE_OVERFLOW`；补丁预检不能替代完整校验。
+任一步返回非零退出码就停止，不继续应用或替换产物。对 `step_meters=-1` 等边界输入，应分别执行 `patch validate` 与 `preview`；补丁预检不能替代完整校验。
 
 `preview` 在隔离目录计算补丁影响，不修改源；它的模拟器结果可能是 `unavailable`，不能因此声称游戏表现已测过。`patch apply` 写入表源但不自动 Git commit。应用前的预检不授权修改生产环境。
 
@@ -67,16 +67,16 @@ manifest 中的 `revisionId`、内容指纹、包裹指纹、底稿指纹描述�
 
 ## 在 Sample 中消费
 
-Sample 的 `config/` 是导出根。旧的平面 `config/movement.json` 等文件不再是 `SampleTables` 的读取目标；实际数据在 `server/` 下，读取入口仍指向包含根 manifest 的整个目录。
+Sample 的服务器导出根是 `Server/Config/Tables/`，客户端导出根是 `Client/Config/Tables/`；`Gameplay/Tables/` 只保存源表、Schema 和 registry。旧的根目录 `config/`、`maps/` 和 `server.json` 不再是当前布局。
 
 数值改动：把完整的新导出作为本地待测试的配置根，设置 `LUMIO_CONFIG_DIR` 指向它，再启动新的 Sample 进程。不要靠重编玩法把数字带进去，也不要把环境变量指向 `server/` 子目录。
 
-Schema 改动：除导出数据外，还要生成并接入新的 Reader。Sample 有现成同步入口；下例在 Sample 根执行，环境变量填写公开 LumioConfig checkout 的绝对路径：
+Schema 改动：除导出数据外，还要生成并接入新的 Reader。Sample 有现成同步入口；下例以 Sample 与 LumioConfig 同级 checkout 为例：
 
 ```bash
-export LUMIO_CONFIG_ROOT="/absolute/path/to/LumioConfig"
-node integration/sync-config-readers.mjs
-node integration/sync-config-readers.mjs --check
+export LUMIO_CONFIG_ROOT="../LumioConfig"
+node Tools/sync-config-readers.mjs
+node Tools/sync-config-readers.mjs --check
 ```
 
 这个脚本只同步 Sample 的 `movement`、`mining`、`attributes` 三表在 S/C 两端的六个 Reader，**不会**同步 JSON 数据，也不会自动处理新加的表。新的游戏表须更新自己项目的 Reader 编译输入与运行时绑定。
@@ -87,4 +87,6 @@ node integration/sync-config-readers.mjs --check
 
 完成记录应包含源改动、执行命令、退出码、新 Revision、端投影检查与实际消费验证。CLI 成功只证明配表管线，后续步骤见 [运行时读取与更新](runtime-and-updates.md)。
 
-公开资料：[CLI](https://github.com/LumioGames/LumioConfig/blob/f0dba85efc2a3935fa0ab18c643d49523166ff4e/docs/reference/cli.md)、[Sample Reader 同步脚本](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/integration/sync-config-readers.mjs)、[Sample 配置根](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/config/README.md)。
+公开资料：[CLI](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/cli.md)、[Sample Reader 同步脚本](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/sync-config-readers.mjs)、[Sample 配置根](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Tables/README.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）

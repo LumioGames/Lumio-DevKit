@@ -106,3 +106,5 @@ art/
 ```
 
 执行真实任务时，用已存在的文件和真实结果填写记录。没有采用某项约定就删去对应字段；不把未填写记录当作已完成证明。接入与复验见 [接入与验收](integration-and-review.md)，项目责任定位见 [项目布局](../../lumio-development/references/project-layout.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
