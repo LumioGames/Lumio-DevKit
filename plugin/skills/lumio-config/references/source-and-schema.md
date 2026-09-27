@@ -1,38 +1,46 @@
 # 表源、Schema 与可见性
 
-本文以 2026-09-27 核对的公开 `LumioConfig origin/main@dd127edd87a00764b2b3ffb210df9f4b8d44d70a` 为例。命令执行见 [编辑与导出](edit-and-export.md)，运行期读取见 [读取与更新](runtime-and-updates.md)。
+表源保存游戏数值，Schema（列类型和校验规则）决定这些数值怎样被检查并交给各端。
+
+以玩家移动为例：
+
+1. `Gameplay/Tables/tables/movement.txt` 的 `default` 行保存每步距离和碰撞查询半径。
+2. `Gameplay/Tables/schemas/movement.json` 要求两者为非负浮点数，并声明服务器与客户端都可见。
+3. 导出器分别生成两端的数据和 Reader（带类型的读取入口），让服务器计算和客户端预测使用相同数值。
+
+命令见 [编辑与导出](edit-and-export.md)，游戏如何读取见 [运行时读取](runtime-and-updates.md)。
 
 ## 文件关系
+
+下表中的源路径相对于 Sample 的 `Gameplay/Tables/`。覆盖层是 LumioConfig 支持的可选布局；Sample 的附加地图配置使用 `Gameplay/Tables/profiles/acceptance/` 下的覆盖层。
 
 | 路径 | 作者维护什么 |
 | --- | --- |
 | `schemas/<table>.json` | 列名、类型、稳定 `ordinal`、必填、范围、默认值、引用、可见性 |
-| `tables/<table>.txt` | 当前权威行数据，pipe-table 文本 |
+| `tables/<table>.txt` | 当前行数据，用竖线分列的文本 |
 | `registry/` | 名字与永久行号、编号域、删除墓碑 |
 | `layers/{engine,platform,server,product,environment}/` | 按层覆盖已有行的值 |
 | 导出目录与 Reader 目录 | 工具输出；按项目分发约定复制或重建 |
 
-先运行 `query schema <table>` 和 `query row <table> <name-or-id>`，避免只看列名猜数值单位。Editor、表格软件或 CSV 都不能成为绕过权威文本源的第二套数据。
+先运行 `query schema <table>` 和 `query row <table> <name-or-id>`，避免只看列名猜数值单位。Editor、表格软件或 CSV 都应回到同一份文本源。
 
 ## 修改 Schema 要确认的东西
 
 每列需要唯一整数 `ordinal`；调整 JSON 数组顺序不能改变列身份。常用类型包括 `bool`、`i32`、`i64`、`u32`、`u64`、`f32`、`f64`、`string`、`enum`、`ref`。
 
-例如一个公开移动配置列使用以下结构：
+Sample 的 [`Gameplay/Tables/schemas/movement.json`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Tables/schemas/movement.json) 在提交 `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb` 中这样声明移动距离列：
 
-```json
-{
-  "name": "step_meters",
-  "ordinal": 2,
-  "type": "f64",
-  "required": true,
-  "minimum": 0,
-  "visibility": "CS",
-  "sharedPrediction": true
-}
-```
+| 字段 | 值 | 意义 |
+| --- | --- | --- |
+| `name` | `step_meters` | 每步移动的米数 |
+| `ordinal` | `2` | 这列的稳定身份 |
+| `type` | `f64` | 64 位浮点数 |
+| `required` | `true` | 必须提供值 |
+| `minimum` | `0` | 不允许负数 |
+| `visibility` | `CS` | 服务器和客户端都能读取 |
+| `sharedPrediction` | `true` | 两端预测共用，导出时核对兼容性 |
 
-这是列片段，不是独立完整 Schema。`step_meters` 映射到 Reader 的 `StepMeters`，`f64` 映射为 `double`。`required:false` 的值类型生成可空值；`enum` 生成字符串，`ref` 生成 `uint`，不要自行替换成另一套枚举或对象关系。
+`step_meters` 映射到 Reader 的 `StepMeters`，`f64` 映射为 `double`。`required:false` 的值类型生成可空值；`enum` 生成字符串，`ref` 生成 `uint`，不要自行替换成另一套枚举或对象关系。
 
 本版本 `movement` 的导出端为 S/C，`step_meters` 与 `sweep_radius_meters` 都可见。修改一列前同时考虑：消费方是否要读、客户端是否应知道、引用目标在同一端是否存在、单位和边界能否由校验器检查。
 
@@ -47,7 +55,7 @@
 | 使用 Schema 默认值 | `@default` |
 | 未提供字段 | 与显式空字符串/空值不同；是否允许由 Schema 决定 |
 
-不要用字符串 `"0"`、空格或空单元格替代这些含义。当前工具会规范化文本并拒绝无效转义、非法数值等输入；以结构化校验错误中的表/行/列为定位依据。
+不要用字符串 `"0"`、空格或空单元格替代这些含义。LumioConfig 会规范化文本并拒绝无效转义、非法数值等输入；以结构化校验错误中的表/行/列为定位依据。
 
 `unit:"seconds"` 的源数值会按 `repository.yaml` 的 `tickRate` 转成帧整数；`unit:"percent"` 会转成千分比整数。`movement.step_meters` 没有这种单位转换声明。改帧率或单位可能影响多表导出，不应只比较一张表。
 
@@ -71,6 +79,6 @@
 
 覆盖层按 `engine → platform → server → product → environment` 合并，只覆盖源表已有行。改了 `tables/` 仍看不到新值时，先查导出的 `origins.json` 与覆盖层；运行时的 Session/User 数据不是这个 CLI 的第六张作者表。
 
-公开资料：[源格式](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/source-format.md)、[movement Schema](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/schemas/movement.json)、[Reader 类型映射](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/csharp-reader.md)。
+公开资料：[源格式](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/source-format.md)、[Sample movement Schema](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Tables/schemas/movement.json)、[Reader 类型映射](https://github.com/LumioGames/LumioConfig/blob/dd127edd87a00764b2b3ffb210df9f4b8d44d70a/docs/reference/csharp-reader.md)。
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

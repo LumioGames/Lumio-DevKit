@@ -1,31 +1,43 @@
 # 客户端输入、同步与表现
 
-客户端只提交输入、消费复制快照并绘制表现；服务器仍是权威业务。共享玩法的声明放在 `Gameplay/`，端特有实现分别放 `.Server.cs` 和 `.Client.cs`。
+客户端发送玩家操作，接收服务器结果，并把结果显示给玩家。
 
-## 从生成接口发送输入
+## 用聊天看完整流程
 
-1. 客户端读取本端输入并调用生成的客户端 RPC/命令入口。
-2. 服务器在 `*.Server.cs` 中做权限、距离、资源和 GAS admission。
-3. 服务器提交结果，Runtime 生成复制差分。
-4. 客户端应用自己的 Replica，再由 UI 或 Local Entity 表现。
+1. Bot 等待客户端副本知道“我是谁”。
+2. 从宿主提供的输入词表找到聊天入口，提交一句话。
+3. 服务器处理聊天并通知接收者。
+4. 客户端显示通知；输入已接受和别人实际看见消息是两件事。
 
-Sample 的聊天入口可读 `Gameplay/Components/Chat/ChatComponent.cs`、`ChatComponent.Client.cs` 与 `ChatComponent.Server.cs`。Bot 场景应使用生成的客户端入口，不要调用服务端 `DispatchServerRpc` 或自拼 wire。
+声明、两端文件与 RPC（发给另一端的调用）见 [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md)。视野范围和字段同步规则也集中在该页。
 
-## 看见什么才算送达
+## 沿 Sample 写 Bot
 
-编译成功只证明客户端程序集可加载；收到 `Welcome` 只证明连接/准入。要证明一条聊天或实体更新已送达，必须同时观察：发送方入站记录、服务器权威应用、复制消息、接收方的客户端状态或 UI。一个客户端看不到另一个玩家可能是 AOI 范围之外，先核对 Scope 与实体位置。
+[Client/Bots/SampleMiningScenario.cs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Bots/SampleMiningScenario.cs) 的 `SampleMiningScenario` 是运行场景；[SampleMiningPlan.cs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Bots/SampleMiningPlan.cs) 根据当前可见世界决定下一步移动、挖掘或拾取。
 
-## 预测和回滚
+以下原文摘自 `Client/Bots/SampleMiningScenario.cs`，提交 `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`，Apache-2.0：
 
-地形修改和碰撞预测由 GAS 统一管理。客户端画面可以先出现预测洞或碰撞变化，待权威结果回来后 GAS 保留、纠正或回放未确认记录；业务库存、掉落和奖励不另造一套客户端预测。预测数据缺失时保持等待，不把未知地形画成空气。
+```csharp
+        if (world.HasSelf && !_chatAccepted
+            && context.Vocabulary.TryGet(BotInputKind.ChatInput, out BotInputTerm chatTerm)
+            && chatTerm.Available)
+        {
+            BotIssueResult chat = context.Issue(BotIssuedCommand.Chat(chatTerm, "sample tour: hello from the mining bot"));
+            if (chat.Accepted) _chatAccepted = true;
+            else _lastReject = chat.Reason;
+        }
+```
 
-## 验证
+场景使用真实输入词表，不猜组件编号或网络字段。失败时保留 `Reason`，根据更新后的世界决定下一次操作。构建和运行见 [客户端搭建](setup.md)。
 
-- 使用两个独立 launch 票运行客户端，记录连接代次和目标 Engine 发布物。
-- 发送一条聊天、移动一次、触发一次挖矿；逐段对齐 DS、Bot、Replica 和 UI 日志。
-- 让目标离开 AOI，再进入 AOI，确认实体出现/离开符合复制语义。
-- 复现一次被拒绝输入，确认只有这次操作失败而连接保持 Active。
+## 预测与画面
 
-未执行的真实浏览器、Native 物理或冷恢复步骤写“本次未验证”。
+移动、技能、冷却和预测统一由 GAS（挂在实体上的技能系统）处理，见 [GAS 技能](../../lumio-gameplay/references/gas-abilities.md)。只供画面使用的火花可以是本地实体，见 [实体与组件](../../lumio-gameplay/references/entities-and-components.md)。
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+浏览器三维方块画面从客户端世界取数据；缺数据时显示等待状态，不能当作空气。资源替换与透明度检查见 [世界资产](../../lumio-art/references/world-assets.md)。
+
+## 验证一次改动
+
+先查输入是否被接受，再对照 DS 记录与接收方世界。聊天应到达接收者；挖矿应核对格子、掉落和拾取后的数值。日志入口见 [客户端排障](diagnostics.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

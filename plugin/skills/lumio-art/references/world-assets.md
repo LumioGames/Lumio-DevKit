@@ -1,53 +1,46 @@
-# 体素、材质、实体模型与世界表现
+# 方块材质与世界表现
 
-先判世界职责，再决定美术资源：世界只有体素和实体；模型、纹理、动画是它们的表现。
+美术资源决定世界对象如何显示，方块和实体仍分别负责地形与游戏逻辑。
 
-## 按职责交付
+## 用箱子看资源分工
 
-| 需求 | 世界对象 | 美术交付 |
-| --- | --- | --- |
-| 静态地形、石头、地面 | 体素 | 方块描述、七面贴图、尺度和拼接说明 |
-| 玩家、掉落矿石、移动物体 | 实体 | 模型/图标、朝向、尺度、状态表现 |
-| 固定占格但带库存的箱子 | 占格体素 + `BoxEntity`/`BoxComponent` | 占格外观和开关状态；库存由玩法实体处理 |
-| 只在客户端出现的火花或提示 | Local Entity | 创建/结束条件、跟随对象和清理方式 |
+1. 箱子占格的方块提供外观。
+2. `BoxEntity` 携带 `BoxComponent` 保存库存逻辑，两者通过格子引用相连。
+3. 玩家操作箱子时由玩法改变状态；美术资源显示对应状态。
+4. 挖掘火花等纯客户端表现可以使用本地实体。
 
-不要把库存、耐久或脚本塞进 `BlockId`；也不要给每个普通地形格造实体。
+实体声明见 [实体与组件](../../lumio-gameplay/references/entities-and-components.md)。外观不决定服务器碰撞、伤害或同步。
 
-## Sample 的方块资产契约
+## Sample 的方块资产
 
-公开 Sample 的方块资产位于 `Client/Assets/Blocks/`，每个 `lumio.<id>.json` 描述方块的 `format`、七面贴图来源和可选许可证；`pack.json` 声明贴图尺寸。贴图放在同目录的 `textures/`，源和可复现导出脚本在 `source/`。这是消费端契约，不是任意图片目录。
+[Client/Assets/Blocks/](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Assets/Blocks/README.md) 保存方块描述、贴图、可重做的源与来源记录。方块目录中的 `asset://blocks/lumio.stone` 对应 `Client/Assets/Blocks/lumio.stone.json`。
 
-从源修改后重新生成并验收：
+以下原文摘自 `Client/Assets/Blocks/lumio.stone.json`，提交 `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`；该目录按 [CC0-1.0](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Assets/Blocks/LICENSE) 发布：
 
-```sh
-node Client/Assets/Blocks/source/generate-textures.mjs
-node Tools/check-block-assets.mjs
+```json
+{
+  "format": "lumio.block-asset.v1",
+  "faces": {
+    "all": "textures/stone.png"
+  }
+}
 ```
 
-`check-block-assets.mjs` 会读取 `Client/Assets/Blocks/pack.json`、描述 JSON、贴图路径和 PNG 尺寸；失败时先修描述或源，不手改生成预览绕过检查。许可证和第三方来源写在 `ATTRIBUTION.md`、`SOURCES.md`，不要把未授权参考图放进运行包。
+`faces` 指六个方块面的贴图，可使用共同贴图或逐面覆盖；`cross` 是草和火把等交叉面片的贴图，不是“第七个方块面”。`pack.json` 声明整包贴图边长，Sample 当前为 128 × 128。原木顶底和侧面、草方块顶侧底可用不同贴图。
 
-## WebGL2 表现检查
+贴图放在 `textures/`。整包按最近邻采样；镂空与半透明按方块材质类别处理。替换资源时同时检查描述、透明度、来源记录和目录引用，步骤见 [资产生产](asset-production.md)。
 
-Sample spectator 的浏览器渲染路径使用 WebGL2。构建发布的 spectator bundle 后，通过 HTTP(S) 打开 `Client/UI/Spectator/host/bin/Release/net10.0/publish/wwwroot`，在真实页面核对：
+## WebGL2 三维视图
 
-1. 方块描述能映射到 `asset://blocks/<id>` 对应的 `Blocks/<id>.json`。
-2. 缺贴图时页面报告资源警告并保持可见的错误状态，不把紫黑占位当作通过。
-3. 深浅背景、透明方块、镂空方块和相邻面在实际视口中没有错误裁切。
-4. 浏览器 Console/Network 没有新增资源加载错误。
+Sample 的 spectator（浏览器旁观客户端）提供 WebGL2 三维方块视图。发布时把资源复制到 `wwwroot/game-assets/Blocks/`，把引擎渲染模块复制到相应目录；用 [客户端搭建](../../lumio-client/references/setup.md) 的发布和启动步骤，再打开打印的地址并加 `?view=blocks`。
 
-只有静态 JSON 通过或设计软件能打开，不能证明 WebGL2 页面已加载；缺 `_framework/`、WASM 或发布 bundle 时记录“缺运行环境”。
+## 当前边界
 
-## 实体表现
+- 当前方块描述不提供动画条带；水和岩浆使用静态贴图。
+- 面贴图按方块种类选取，不随 BlockState（同种方块的状态值）变化；门、台阶等需按现有规则设计。
+- 通用实体模型、骨骼与动画导入流程在示例中尚未提供，不能从“页面能画实体”推断已经接线。
+- 缺发布 bundle、WASM 或 WebGL2 浏览器属于缺运行环境；描述正确但没有消费映射属于尚未接线。
 
-先找项目里已经工作的实体加载点，再对齐世界单位、原点、朝向、挂点、动画状态和生命周期。模型外观不决定服务器碰撞、伤害或同步；这些由 Gameplay/GAS 和实体组件决定。
+来源：[方块资源说明](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Assets/Blocks/README.md)、[发布工程](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/UI/Spectator/host/Lumio.Sample.Client.Spectator.csproj)。实际验收见 [接入与验收](integration-and-review.md)。
 
-## 证据边界
-
-- **能力不存在**：当前发布物没有所需格式或导入入口。
-- **尚未接线**：方块描述存在，但客户端没有消费映射。
-- **缺运行环境**：缺 WebGL2 发布 bundle、WASM 或目标浏览器。
-- **本次未验证**：未执行浏览器页面或真实场景检查。
-
-接入步骤见 [接入与验收](integration-and-review.md)。
-
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

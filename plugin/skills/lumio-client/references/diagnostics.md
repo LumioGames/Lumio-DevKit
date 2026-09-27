@@ -1,52 +1,37 @@
 # 客户端日志与排障
 
-先保存本次命令（去除票和密码）、退出码、Host/SDK/游戏版本和独立日志目录。通用证据与 Native 身份核对见 [诊断](../../lumio-development/references/diagnostics.md)。
+先判断卡在启动、准入还是玩法步骤，再对照同一次运行的服务器记录。
 
-## 先确定卡在哪一层
+## 从导览查起
 
-| 证据 | 已证明 | 尚未证明 |
+启动器打印的 `EVIDENCE_PATH` 是本次运行目录。文件名和判定来自 [Tools/launcher.mjs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/launcher.mjs) 与 [Tools/tour-steps.mjs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/tour-steps.mjs)。
+
+| 记录 | 能说明什么 | 还要看什么 |
 | --- | --- | --- |
-| `admission-events.ndjson` 的 `started` | Bot 进程启动 | Socket、验票和世界 |
-| `connected` | 握手已接受，进入同步 | 初始副本已提交 |
-| `admitted` | Session 进入 Active | 某次游戏操作成功 |
-| `result.ndjson` 的 `issue.accepted=true` | 输入出口接收请求 | 已发出或已被 DS 应用 |
-| `uplinks` 增长 | 会话实际产生上行 | 权威提交及其他玩家看见 |
-| 第二客户端出现目标聊天/状态 | 下行消费成功 | 全部玩法、存档和重启正确 |
+| `verification.json` | 哪个步骤失败 | 对应的 DS 与 Bot 日志。 |
+| `bot-1/admission-events.ndjson` | 连接与准入进度 | 是否到达 `admitted` 及后续操作结果。 |
+| `bot-1/result.ndjson` | 挖矿场景的输入与判定 | 请求是否最终造成服务器状态变化。 |
+| `bot-verify/result.ndjson` | 恢复验证结果 | 同一存储下的地图和矿石数。 |
+| 浏览器 Console / Network | 页面加载、连接与资源错误 | 世界是否应用，画面是否出现。 |
 
-常驻 Bot 使用 `--log-dir` 下的 `yyyy-MM-dd_序号.log` 保存生命周期；场景额外写 `result.ndjson`。不能假设不同入口都有完全相同的日志文件。
+输入已接受只说明请求进入出口；上行产生也不等于服务器已应用。使用接收方状态或对应断言确认业务结果。
 
-```sh
-rg 'session state changed|session_faulted|superseded|cadence.rejected' .run/bot01
-rg '"kind":"(vocabulary|issue|assert|run)"' .run/chat-once/result.ndjson
-```
+## 常见现象
 
-常驻日志旋钮：`--log-min-level`、`--log-file-size-mb`、`--log-retention-days`、`--log-mailbox-capacity`；环境键分别为 `LumioBotLogMinLevel`、`LumioBotLogFileSizeMb`、`LumioBotLogRetentionDays`、`LumioBotLogMailboxCapacity`，目录键为 `LumioBotLogDir`。先临时升到 `debug` 重现一次，再收窄；不要靠无限增大日志队列掩盖阻塞。
-
-## 常见失败
-
-| 现象/码 | 检查与下一步 |
+| 现象 | 处理 |
 | --- | --- |
-| `LUMIO_SDK_UNRESOLVED` | SDK feed/缓存尚未就绪；按通用搭建取得完整包，不补私有路径或删闸门。 |
-| `GAMEPLAY_ASSEMBLY_NOT_FOUND` / 20 | 核实 `--gameplay` 是当前客户端输出 DLL。 |
-| `SCENARIO_ASSEMBLY_NOT_FOUND` / 21 | 核实场景文件与依赖实际存在。 |
-| `GAMEPLAY_REGISTRY_MISSING` / 22 | 检查生成是否执行、侧别和依赖版本；不要手造“全部实体都存在”的注册表。 |
-| `SCENARIO_TYPE_NOT_FOUND` / 23 | 传完整命名空间与类名。 |
-| `SCENARIO_TYPE_INVALID` / 24 | 类型应可创建并实现相同发布的 `IBotScenario`。 |
-| `CAPABILITY_MISMATCH` / 25 或能力 `BLOCKED` / 8 | 比对 `RequiredCapabilities` 与实际词表；报告缺失能力。 |
-| `BLOCKED` / 8，缺连接材料或 Native | 核对 `--server`、票环境变量、Native 路径与对应 sidecar；不要切到 fixture 伪装生产通过。 |
-| `no_uplink_channel` | 使用了无宿主输入出口的 context；交给真实 Host 创建场景上下文。 |
-| 输入被拒绝但界面无提示 | 记录 `BotIssueResult.Reason` / `BlockedReason`；当作该操作失败，别反复发送。 |
-| 常驻连接后没有消息 | 先检查 Active、Self 和 `InputEnabled`，再看实际词表与上行；不要仅观察进程 CPU。 |
-| 浏览器白屏/空点图 | 核对 HTTP 服务、WASM `_framework/` 是否加载、launch/WS 请求和实际 C# 副本输出；缺产物不能当作空世界。 |
+| Engine 或客户端程序集缺失 | 检查子模块，按 [搭建](setup.md) 构建客户端与 Bot。 |
+| Bot 已启动但未准入 | 查准入日志、DS Ready 与房间票，按 [错误码](../../lumio-development/references/diagnostics.md#按症状查错误码) 处理关闭原因。 |
+| 挖矿没反应 | 对照 `SampleMiningScenario` 输入结果、DS 日志与当前可见目标；离开视野不等于被挖掉。 |
+| 收到首个方块区域后失败 | 启动器默认传入 `Server/Assets/Maps/bot-voxel-budget.json`；收到方块数据的房间不能关闭体素预算配置。 |
+| 浏览器白屏 | 确认服务的是发布目录，检查 `_framework/`、`lumio_voxel_wasm.wasm` 和 import map（模块名到发布文件的映射表）。 |
+| 只有俯视图，没有三维方块 | 在打印的页面地址后加 `?view=blocks`，检查 WebGL2 与资源请求。 |
+| 方块显示紫黑格 | 查看资产警告和缺失贴图，按 [美术验收](../../lumio-art/references/integration-and-review.md) 修复。 |
 
-## 断线与拒绝
+## 断线与重试
 
-普通操作拒绝与会话数据损坏是不同问题。拒绝应有明确结果，并允许后续合法操作继续；若 SDK 把普通拒绝升级为世界故障，保留首次错误、输入和前后 Tick，报告缺陷，不在游戏侧吞异常或重置世界。
+保留原始关闭原因，区分正常结束、网络中断与数据应用失败。由现有宿主处理连接生命周期，新会话按宿主流程取得新票。不要直接重发旧会话中结果未知的输入，否则可能重复执行。
 
-普通网络断开允许宿主在完整回收旧代资源后，从平台取得新端点和新准入票，再建立连接、绑定并接收初始状态。现有生产 Bot 使用 `LUMIO_PLATFORM_ORIGIN`、`LUMIO_GAME_SLUG`、`LUMIO_ACCOUNT_PASSWORD` 及 Bot 工具凭据完成取票；取票、准入或数据应用失败就结束本次恢复，不用旧票无限重试。旧连接的未确认输入与预测历史作废，新连接只接受新输入。这条重连流程不属于用重放掩盖操作错误。
+公开入口：[浏览器连接和画面](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/UI/Spectator/main.js)、[挖矿场景](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Bots/SampleMiningScenario.cs)。交回时附去敏命令、版本、退出码、失败步骤与第一条错误；服务器端查 [服务器日志](../../lumio-server/references/diagnostics.md)。
 
-数据校验、权威应用或必要预测重建失败时，立即禁输入、停止发布并最终释放当前游戏 Session，不触发上述自动重连；仍有效的平台账号会话可以保留，用户手动重新进入时创建新 Session。正常退出或同账号接管也不触发自动恢复。客户端预测重建本身仍是 Runtime/GAS 的独立正常机制，不能因为禁止错误兜底就一并禁止。
-
-自建 Host 调用 `IClientSession.Dispose()` 后仍需在原 owner 循环继续 Tick，读取快照 `CleanupStatus` / `IsDisposed` 确认释放完成，再释放 Native 资源。清理失败时保留未释放证据，不自动开新代；不得用跨线程补 Tick 或直接卸载 Native 库处理卡顿。
-
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

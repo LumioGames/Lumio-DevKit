@@ -1,32 +1,46 @@
 # GAS 技能与效果
 
-GAS（Gameplay Ability System，玩法技能系统）把技能的准入、消耗、预测和效果结算放在实体上的组件里。Sample 用挖矿和捡矿展示这条链；示例没有提供可直接套用的 Gameplay Tags API。
+GAS（Gameplay Ability System，玩法技能系统）通过实体上的组件统一处理技能准入、冷却、属性变化、效果与预测。
 
-## 从玩家挖矿到捡矿
+## 从挖矿到捡矿
 
-按下面的真实声明阅读一次完整操作：
+1. 玩家实体 `Gameplay/EntityTypes/PlayerEntity.cs` 挂上 `AbilityComponent`（技能）、`AttributeComponent`（数值属性）、`EffectComponent`（效果），并声明会保存的 `Stamina`（体力）与 `Ore`（矿石）属性。
+2. `Gameplay/SampleGameplay.cs` 的 `BindPlayer` 把挖矿的体力检查接到玩家现有属性。只有 `MineAbility` 支付挖矿体力；走路与拾取没有该消耗，体力耗尽后仍能捡矿。
+3. `Gameplay/Abilities/MineAbility.cs` 用 `MineAbility.Input.TargetHex` 指定矿脉。`CanActivate` 检查实体还存在、类型为 `VeinEntity`、仍有储量与有效绑定，并检查距离；GAS 同时负责冷却和消耗准入。
+4. 普通一击在 `Execute` 中扣体力、减少 `VeinReserveComponent.Remaining`，然后设置冷却。最后一击调用按端实现的 `OrderFinalDig`；服务器的 `MineAbility.Server.cs` 转到 `SampleMiningComponent.StageFinal`，排入地形修改，并把等待信息写到玩家的 `PendingDigComponent`。
+5. 地形真正应用后，`Gameplay/SampleMiningComponent.Server.cs` 的 `Settle` 在后续业务阶段读取结果，再由 `Pay` 扣体力、处理仍存活的矿脉储量，并通过 `World.Commands.Create<OreDropEntity>()` 排入掉落。地形请求若被拒绝，不扣体力、不发矿。排入成功时已设置的冷却与最终地形结果是两件事。
+6. `Gameplay/Abilities/PickupAbility.cs` 检查掉落还存在、`OrePileComponent.Amount` 大于零、玩家在拾取距离内。`PickupAbility.Server.cs` 的 `ExecuteCore` 先取出数量，再把矿堆数量清零，防止同一帧第二个人重复领取；随后调用 `Effects.Apply<PickupOreEffect, PickupOreEffect.Parameters>` 并排入销毁掉落实体。
+7. `Gameplay/Effects/PickupOreEffect.cs` 的 `PickupOreEffect` 是即时效果。引擎提交实体创建/销毁后结算这个效果，`Apply` 在 `EffectSettlementContext`（引擎允许写效果属性的结算上下文）中把 `Parameters.Amount` 加到玩家 `Ore` 的基础值。最终玩家看到掉落消失、矿石数量增加。
 
-1. `Gameplay/EntityTypes/PlayerEntity.cs` 给玩家挂 `AbilityComponent`、`AttributeComponent` 和 `EffectComponent`，并用 `[DeclareAttribute("Stamina", Persist = true)]`、`[DeclareAttribute("Ore", Persist = true)]` 声明两个属性。
-2. `Gameplay/Abilities/MineAbility.cs` 声明 `[AbilityType(2u, Prediction = PredictionKind.LogicPredict, Cost = "Stamina")]`，输入类型是 `MineAbility.Input`，目标字段是 `TargetHex`。`CanActivate` 检查目标和距离，`Execute` 扣除 `Stamina` 或为最后一击排入地形操作；`Register()` 把类型注册到 `AbilityTypeCatalog`。
-3. 不是最后一击时，`MineAbility.Execute` 直接减少 `Stamina` 和 `VeinReserveComponent.Remaining`，并设置冷却。最后一击只写入待结算记录并调用按端实现的 `OrderFinalDig`；地形结果回来后才由 `SampleMiningComponent.Settle` 处理体力、储量和掉落。
-4. `Gameplay/Abilities/PickupAbility.cs` 声明 `[AbilityType(3u, Prediction = PredictionKind.AuthorityOnly)]`。服务器文件 `PickupAbility.Server.cs` 在 `ExecuteCore` 中读取 `OrePileComponent.Amount`，调用 `Effects.Apply<PickupOreEffect, PickupOreEffect.Parameters>`，再处理掉落实体生命周期。
-5. `Gameplay/Effects/PickupOreEffect.cs` 声明 `[EffectType(TypeId = 10, Instant = true)]`。`Parameters.Amount` 是要增加的矿石量，`Apply(NetEntityId target, in Parameters parameters)` 在 `EffectSettlementContext` 中写入目标的 `Ore` 属性。
+挖矿声明摘自 [`Gameplay/Abilities/MineAbility.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Abilities/MineAbility.cs)，提交 `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`，许可证 Apache-2.0：
 
-## 预测、回滚和玩家能看到什么
+```csharp
+[AbilityType(2u, Prediction = PredictionKind.LogicPredict, Cost = "Stamina")]
+public sealed partial class MineAbility : AbilityType<MineAbility.Input>
+```
 
-`MineAbility` 是 `PredictionKind.LogicPredict`。客户端和服务器执行同一份 `Execute`；客户端的 `MineAbility.Client.cs` 把最后一击暂存到 GAS 预测会话，因此玩家可以先看到洞和碰撞变化。GAS 负责记录未确认窗口、按权威结果纠正并重放；这段 Sample 代码没有自己维护 Undo 表。
+## 预测与回滚时看到什么
 
-预测视图遇到未加载的 Section 时，`MineAbility.ClassifyPredictedDig` 返回 `PredictedDigVerdict.AwaitAuthority`；未知不是空气，客户端不能凭猜测改变地形。权威拒绝时，不应扣费、掉矿或把本地特效当成功。
+预测（服务器结果到达前，客户端先执行允许预测的逻辑）让挖矿立即响应。`MineAbility` 使用 `PredictionKind.LogicPredict`，两端执行相同的 `Execute`，最后一击的端实现不同：
 
-`PickupAbility` 明确是 `PredictionKind.AuthorityOnly`，所以拾取的 `PickupOreEffect` 由权威结算；Sample 没有提供客户端预测这个奖励 Effect 的实现。客户端最终应以权威属性同步和实体变化刷新 UI，真实的视觉反馈需要 Host 运行验证。
+1. `Gameplay/SampleMiningComponent.Client.cs` 的 `TryLocate` 从客户端已收到的绑定副本查找格子；客户端不创建或绑定矿脉。
+2. `Gameplay/Abilities/MineAbility.Client.cs` 读取该格子的预测视图。仍有方块且绑定目标正确时，把挖掘排进 GAS 预测会话，玩家可先看到洞，碰撞查询也使用挖后的结果。
+3. 服务器确认后，客户端保留确认的结果。服务器结果不同或拒绝时，GAS 回滚（撤销未被确认的预测变化），再重放（基于服务器结果重新执行仍待确认的输入）。玩家可能看到方块和碰撞恢复，随后未确认的动作重新表现；不要在游戏代码里再维护一张撤销表。
+4. Section（地图分块）未加载、尚无绑定位置或没有打开预测会话时，客户端等待服务器，不凭空挖洞。`ClassifyPredictedDig` 区分 `Order`、`AwaitAuthority`、`Refuse`：未知不等于空气，也不等于已证明超出距离。
 
-## 属性、效果与标签
+`PickupAbility` 使用 `PredictionKind.AuthorityOnly`（只由服务器执行）。玩家的奖励效果等服务器结算后再同步；预测拾取奖励的示例中尚未提供。回滚也不会把“本地看见洞”变成“服务器已经发矿”。
 
-- 属性是实体上的 `AttributeComponent` 字段。Sample 的 `Stamina` 和 `Ore` 由实体声明，初始值来自配置绑定；`MineAbility` 读取 `GetBaseValue`，`PickupOreEffect` 通过 `GetBase` 写入。
-- 效果是可登记的结算类型。`PickupOreEffect.Register()` 调用 `EffectTypeCatalog.Register<PickupOreEffect, Parameters>`；生成的 `GeneratedEffectRegistry.g.cs` 可按类型返回 `10`。
-- 技能有稳定类型号：Sample 的 `MoveAbility`、`MineAbility`、`PickupAbility` 分别登记为 `1`、`2`、`3`。不要因文件排序重编号。
-- Sample `origin/main` 的 `Gameplay/` 没有 Gameplay Tags 或标签声明。需要标签时先查当前 SDK 的公开 XML/API；示例中尚未提供，不能编一个 `Tag` 类或方法。
+## 怎样组织技能、属性、效果和标签
 
-服务器、客户端和体素接缝的边界分别见 [lumio-server](../../lumio-server/SKILL.md)、[lumio-client](../../lumio-client/SKILL.md) 和 [体素写入](../../lumio-voxel/references/mutations.md)。
+| 内容 | Sample 用法 | 修改时检查 |
+| --- | --- | --- |
+| 技能 | `MoveAbility`、`MineAbility`、`PickupAbility` 的稳定类型号分别为 `1`、`2`、`3`。 | 通过 GAS 激活，不从普通系统直接调用 `Execute` 绕过准入与冷却。 |
+| 属性 | `Stamina`、`Ore` 由玩家声明，初始值来自配置。`GetBaseValue` 读基础值，挖矿用 `SetBaseValue` 扣体力。 | 使用当前世界的 `SampleConfigBinding`，不要另建一份库存或体力计数。 |
+| 效果 | `PickupOreEffect` 为 `[EffectType(TypeId = 10, Instant = true)]`；`Parameters.Amount` 传入奖励。 | `Effects.Apply` 排入效果；不要从拾取代码直接调用效果的 `Apply` 绕过结算。 |
+| 标签（用于表示或匹配玩法状态的标记） | Gameplay Tags 的声明和使用示例中尚未提供。 | 先查安装版本的公开 API 参考，不能凭概念编造 `Tag` 类型、阻止规则或调用签名。 |
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+`GeneratedAbilityRegistry.RegisterAll()` 登记技能；效果则由 `Gameplay/SampleGameplay.cs` 的 `RegisterCatalog` 调用 `PickupOreEffect.Register()` 登记。`GeneratedEffectRegistry` 提供类型号查找，不能把它当作效果登记已经完成的证据。生成步骤见 [代码生成](code-generation.md)。
+
+失败时沿流程定位：挖不了先看目标、绑定、距离、体力和冷却；最后一击无奖励按事务号对照 `mining_stage`、`mining_applied`、`mining_reward` 或 `mining_refused` 日志；捡不到检查 `pickup_invalid_target`、`pickup_target_gone`、`pickup_out_of_reach`。帧内顺序见 [Tick](tick.md)，宿主日志见 [服务器技能](../../lumio-server/SKILL.md)，地形处理见 [体素写入](../../lumio-voxel/references/mutations.md)。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

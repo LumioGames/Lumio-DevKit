@@ -1,57 +1,39 @@
 # 世界、方块与底图
 
-## 使用前
+方块负责静态地形，实体负责会动或需要逻辑的东西，底图提供世界启动时的地形。
 
-SDK 与工具的前置条件见 [开始开发](../../lumio-development/references/getting-started.md)，文件放置见 [项目结构](../../lumio-development/references/project-layout.md)，功能现状见 [能力说明](../../lumio-development/references/capabilities.md)，错误取证见 [诊断](../../lumio-development/references/diagnostics.md)。本指南解释 SDK 消费方法，不要求阅读私有实现。
+## 用箱子理解分工
 
-核对基线为 `LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb` 与 Engine v0.0.2。代码中存在接口只说明有消费入口；真实服务器、浏览器或冷恢复仍须用同一发布物验证。公开 API、错误码和 XML 说明以 `Engine/sdk/` 中随包内容为准。
+1. 箱子占据的格子是方块。
+2. 箱子的库存放在 `BoxComponent`，由 `BoxEntity` 携带。
+3. 格子与实体通过一条引用相连；箱子不需要第二份位置。
+4. 客户端显示箱子外观，玩家请求取放物品时由服务器处理逻辑。
 
-## 用什么表示游戏物体
+世界只有方块（体素）与实体。只供客户端画面的火花是本地实体，不是第三种世界对象。声明与同步规则见 [实体与组件](../../lumio-gameplay/references/entities-and-components.md)，真实箱子声明在 [Gameplay/EntityTypes/BoxEntity.cs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/EntityTypes/BoxEntity.cs)。
 
-| 物体 | 放在哪里 | 玩法后果 |
-| --- | --- | --- |
-| 地板、岩壁、普通建材 | 体素 | 格子保存方块身份，支持地形查询和破坏 |
-| 玩家、掉落矿石、移动物体 | Entity | 位置、逻辑与同步归实体 |
-| 有库存的固定箱子、有剩余储量的矿脉 | 体素 + Entity，稀疏绑定 | 格子负责占位，实体保存业务状态；破坏时协调处理两半 |
-| 挖掘火花、选格提示 | 客户端 Local Entity | 从玩法结果产生表现，不成为服务端权威物体 |
+## 方块编号与区域
 
-不要把背包、阵营、矿脉剩余次数或脚本塞入 `BlockId`，也不要为每个普通地形格都造实体。`BlockId` 是无符号 `uint`；材质和具体模型来自项目目录及其配表。透明外观不自动意味着可穿过，编号大小也不能推出碰撞性质。
+`BlockId` 是 `uint`（32 位无符号整数）。发布包的 `VoxelCellQuery` 读值和 `VoxelWriteEntry` 写值都使用这个类型；不要缩成 `ushort`。编号用于标识方块，不存库存、储量或脚本。外观透明也不代表可以穿过，碰撞和外观分别由方块目录与资产描述决定。
 
-## 格子和区域身份
+Section（16 × 16 × 16 格的地形区域）是 Sample 查询、修订与订阅使用的单位。`sectionKey` 标识区域，`cellOffset` 标识其中一格。先用 Sample 已有位置查询取得它们，再调用读写接口。矿脉定位入口是 `SampleMiningComponent.TryLocate`，见 [查询](queries.md)。
 
-Section 是 `16 × 16 × 16` 的数据单元，包含 4096 格；Chunk 是 16 个 Section 竖向组合的列。把局部修订、加载状态和读写请求落到 Section 上。
+## 使用现成地图
 
-当前 C# 游戏消费口把 Section 标识作为 `ulong sectionKey` 传入，把格内位置作为 `int cellOffset` 传入。取得这两个值应使用项目已有的地图/坐标映射或 SDK 对应接口，不要把字符串键、网络标识或自编的位打包直接转换成这个整数。SDK 未给出转换函数时，应向交付方取得映射说明，不发明一个 `WorldToSectionKey` API。
+| Sample 路径 | 用途 |
+| --- | --- |
+| `Server/Assets/Maps/sample.voxel` | DS 可恢复的底图文件。 |
+| `Server/Assets/Maps/sample.layout.json` | 制作底图时使用的布局说明。 |
+| `Server/Assets/Maps/official-catalog.json` | 方块种类、形状与美术资源引用。 |
+| `Server/Config/Startup/server.json` | 地图路径、编号、版本、哈希与存档目录。 |
 
-`cellOffset` 范围是 `0..4095`。当前格内序为 X 最快、其次 Z、最后 Y：对于已校验为 `0..15` 的局部坐标，`cellOffset = localY * 256 + localZ * 16 + localX`。世界连续坐标、整数格坐标与格内坐标是不同输入；负坐标不能用朝零截断代替项目的格定位规则。
+先按 [服务器搭建](../../lumio-server/references/setup.md) 跑现成地图。换地图时同时核对配置指向的文件和身份，使用匹配的方块目录。检查点恢复沿用原目录；不要手改二进制或哈希来绕过加载错误。
 
-`VoxelCellQuery.BlockId` 与 `VoxelWriteEntry.BlockId` 均按 `uint` 处理；未知/未就绪结果没有可用的方块值。
+## 当前制作能力
 
-## 从现成地图开始
+[Tools/capture-basemap.mjs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/capture-basemap.mjs) 是制作底图的脚本入口，但它需要 `Engine/tools/capture-voxel.mjs`。v0.0.2 发布物没有这个工具，因此当前发布物不能通过这条脚本重新捕获底图；这是缺少已发布工具，不是现成地图无法运行。地图制作工具需由上游补齐。
 
-公开 Sample 提供：
+读取、移动扫掠和挖穿已有 Sample 调用，见 [查询](queries.md) 与 [写入](mutations.md)。方块材质和 WebGL2 已有接入，见 [世界资产](../../lumio-art/references/world-assets.md)。通用建造技能在示例中尚未提供。
 
-- `Server/Assets/Maps/sample.voxel`：已捕获的底图数据，适合作为复用已有地图的起点。
-- `Server/Assets/Maps/sample.layout.json`：作者时布局说明，不是 DS 每次启动执行的生成程序。
-- `Server/Config/Startup/server.json`：底图与配置的 Host 模板，包含 `base_map_id`、`base_map_version`、`base_map_content_sha256`。
+源码入口：[地图目录](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Server/Assets/Maps/official-catalog.json)、[客户端矿脉定位](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/SampleMiningComponent.Client.cs)。环境前置见 [开始开发](../../lumio-development/references/getting-started.md)。
 
-Sample 使用 `world_profile=runtime+voxel`、`durability=snapshot_only`。接入时保留所用 Host 支持的词表，把地图文件、版本与实际文件 SHA-256 配对。不要手改快照二进制，也不要只改 hash 字段来“修好”损坏文件。改地图需要从作者工具重新导出，并验证当前 SDK/Host 能读取。
-
-作者时捕获入口为 `Tools/capture-basemap.mjs`；仅 clone Sample 不代表取得作者时工具的全部构建依赖。没有工具时，可复用匹配版本的现成快照，或报告缺少工具。不要实现另一套快照编码器补洞。
-
-## Host 接入应当提供什么
-
-游戏通常接收 `HostVoxelWorldAdapter` 的读取、写入和 Section 绑定能力。宿主负责世界生命周期、材质目录、地图恢复与 Tick 接线；游戏负责玩法。通过 `VoxelGameplayBinding.Resolve(world.Manager)` 取得已绑定的适配器，玩法不自行制造 handle、Native ABI 或第二个世界。
-
-方块实体的关联只来自 Section 绑定表：一格保存体素，占格的业务数据保存在实体；客户端看到的范围跟随持有该 Section 的订阅，而不是另造一套空间 AOI。箱子示例见 `Gameplay/EntityTypes/BoxEntity.cs` 和 `Gameplay/Components/Box/BoxComponent.cs`。
-
-接入完成后验证一小块已加载区域：已知实体方块能读到、已知空格能读到、区域外查询保留缺块状态；然后按 [查询](queries.md) 与 [写入](mutations.md) 增加玩法。渲染、光照、网格或编辑器工具若未随当前 SDK 提供，应把能力缺口写清楚，不以接口声明推导出完整编辑体验。
-
-## 可公开核对的样例
-
-- [Sample 世界模型与环境现状](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/README.md)
-- [地图布局](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Server/Assets/Maps/sample.layout.json)
-- [作者时捕获入口](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/capture-basemap.mjs)
-- [Host 配置样例](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Server/Config/Startup/server.json)
-
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

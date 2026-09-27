@@ -1,51 +1,49 @@
 # 日志与分层定位
 
-先保存本次命令、退出码、Sample/Engine 版本、目标端和失败前后的原始日志。去掉账号密码、准入票、`Authorization` 和完整用户数据；不要用“进程被清理”证明步骤通过。
+从玩家看到的症状找到最早失败的一层，保留关闭原因、错误码和前后的日志。
 
 ## 按症状查错误码
 
-下面区分两类公开来源：DS WebSocket 关闭原因及数值来自 Engine v0.0.2 的 [`web/ds-close-codes.mjs`](https://github.com/LumioGames/LumioEngineRelease/blob/v0.0.2/web/ds-close-codes.mjs)，体素和持久化错误码来自 [SDK v0.0.2 包内的 `content/docs/error-codes.md`](https://github.com/LumioGames/LumioEngineRelease/tree/v0.0.2/sdk)。完整表以这两份发布物文件为准；看到新码时保留原文，不借用相近码。标为 Host/Sample 的名称不是 SDK 公共错误码。
+完整码表在 [Engine v0.0.2 SDK 包](https://github.com/LumioGames/LumioEngineRelease/raw/refs/tags/v0.0.2/sdk/Lumio.Engine.SDK.0.0.2.nupkg) 内：用 ZIP 解压工具打开，阅读 `content/docs/error-codes.md`；WebSocket 的完整关闭原因、数值和处理动作在 `content/wire/ds-transport-v1.json` 的 `closeCodes` 中。关闭码映射也可直接浏览发布物的 [`web/ds-close-codes.mjs`](https://github.com/LumioGames/LumioEngineRelease/blob/v0.0.2/web/ds-close-codes.mjs)。以下只选常见症状。
 
-| 症状 | 关闭原因或错误码 | 含义 | 怎么办 |
+| 症状 | 关闭原因或错误码 | 什么意思 | 怎么办 |
 | --- | --- | --- | --- |
-| 刚连接就被拒绝 | `not_serving` (1013, DS) | 宿主尚未进入服务中，启动期新连接无会话 | 先等 `DS_READY`；连接阶段按启动器的有限重试重取同一张 launch 票。已经 Active 后再收到它应报告 DS 契约问题。 |
-| 准入容量暂满 | `admission_capacity` (1013, DS) | 服务已启动，但准入容量或 Owner 连接事件队列已满 | 稍后按有限退避拿新端点/票重试；不要把它当票格式错误。 |
-| 房间运行中断开 | `internal_error` (1011, DS) | 服务端内部故障，不能把它当普通业务拒绝 | 保存 DS_FATAL、Host/Native 身份和首个异常；停止输入，修复兼容发布物后重现。 |
-| 票过期或房间不匹配 | `protocol_violation` / `connection_timeout` (DS) | 准入字段、协议顺序或握手时限不满足 | 重新从 Platform 获取本房间新票，核对 allocation 六项和公钥；不要把账号登录凭据当 DS 票。 |
-| 正常退出或维护 | `shutdown` / `session_closed` (1000, DS) | 对端按协议结束会话 | 检查是否有 `DS_STOPPED` 和最终 checkpoint；不要自动重连正在关闭的房间。 |
-| 体素读不到 | `section_unavailable` / `pinned_read_returned_pending` (SDK) | Section 尚未就绪或驻留预算不足，结果不是空气 | 记录 Section key 和 revision，等待宿主驻留后重试当前操作；不要填 `BlockId=0`。 |
-| 写入被并发拒绝 | `stale_section_revision` (SDK) | 提交使用的 Section 修订已过期 | 重新读取、重新判断权限和目标，再以同一业务操作身份排队；不要盲目换 revision 覆盖。 |
-| 查询参数越界 | `coordinate_out_of_bounds` / `cell_offset_out_of_range` (SDK) | 世界坐标或 Section 内偏移不在契约范围 | 修正坐标映射和 `0..4095` 的 cell offset；保留原始码。 |
-| 批量读写超额 | `read_budget_exceeded` / `write_batch_too_large` (SDK) | 一次调用超过发布物预算 | 拆小批次并记录预算；不要静默截断请求。 |
-| 带存档起不来 | `checkpoint_corrupt_manifest` / `checkpoint_incomplete_group` | 检查点身份或 Runtime/Voxel 成套文件不完整 | 保留原存储和日志，核对发布、底图、表清单和 generation；按恢复计划处理，不删除最新组来“修复”。 |
-| 配表加载失败 | `MANIFEST_NOT_FOUND` / `TABLE_CONTENT_FINGERPRINT_MISMATCH` (Host/Sample loader，本轮未执行 Loader 实例复测) | export 根缺文件或清单指纹与内容不一致 | 从同一源重新导出并重新生成 Reader；不要手改 manifest/hash。 |
+| 刚连接就被拒绝 | `not_serving`，1013 | 服务器仍在启动，这个连接尚未进入房间 | 等待 `DS_READY`；连接阶段按客户端已有逻辑有限退避重试同一地址，超限后报告失败。 |
+| 房间暂时挤不进去 | `admission_capacity`，1013 | 服务器正在服务，但待准入数、房间数或连接事件队列达到上限 | 连接阶段有限退避重试同一地址；持续失败时查服务器容量，不把它当票格式错误。 |
+| 票过期或房间不匹配 | `admission_refused`，1008 | 本次准入被拒绝，具体原因在服务器准入日志里 | 结束本次尝试，不用同一张票自动重试；核对房间与凭证，重新走平台进房流程。 |
+| 被同账号的新连接踢出 | `superseded`，1000 | 新连接取代旧连接 | 提示账号已在别处连接，不自动重连争抢会话。 |
+| 发送消息后被断开 | `protocol_violation`，1008 | 帧类型或握手顺序不符合协议 | 保存原始原因与客户端版本，修复协议用法；不自动重连掩盖错误。 |
+| 长时间无响应后断开 | `connection_timeout`，1008 | 空闲超时，服务器未收到入站帧或心跳回复 | 查网络与心跳；按客户端恢复流程取得新地址和新票后重连。 |
+| 房间运行中出现服务端故障 | `internal_error`，1011 | 连接或世界因内部故障不能继续 | 保留第一条故障日志和发布物版本，按服务端故障处理，不当普通断线或业务拒绝。 |
+| 正常结束或关服 | `shutdown` / `session_closed`，1000 | 进程正在关服，或会话已结束 | 不自动重连；需要再次进入时回平台领取房间地址。存档结果另查关服日志。 |
+| 体素暂时读不到 | `section_unavailable` | Section（16×16×16 格的体素分区）当前不可用 | 停止当前读写，核对分区是否已装载；不能把缺失数据填成空气。 |
+| 已保证就绪的区域仍读不到 | `pinned_read_returned_pending` | 已完成 pin（要求区域保持可用）后仍返回 Pending 或 Unavailable，违反就绪保证 | 保留区域、版本和宿主日志，报告该故障；不能当正常等待继续写地形。 |
+| 写地形被拒绝 | `stale_section_revision` | 写入带的分区版本已过期；存储回执也可能带了不匹配版本 | 对写入重新读取并重新判断目标后提交；对存储回执检查版本关系，不强改版本号覆盖。 |
+| 坐标或格内偏移越界 | `coordinate_out_of_bounds` / `cell_offset_out_of_range` | 坐标不在允许范围，或格内偏移不在 0–4095 | 修正坐标换算与范围检查后重新发起操作。 |
+| 一次读写太多 | `read_budget_exceeded` / `write_batch_too_large` | 超过读取预算或整批写入条数上限 | 按发布物限制拆分业务批次；不得截断请求后声称整批成功。 |
+| 带存档起不来 | `checkpoint_corrupt_manifest` / `checkpoint_incomplete_group` | 检查点清单损坏，或恢复所需的一组文件不完整 | 保留原存档、版本和第一条恢复错误，请维护者检查清单及配套文件；不要删除最新存档来掩盖失败。 |
 
-浏览器显示的 1006 是浏览器报告的无 close frame，不是 DS 可以发送的服务端码。业务拒绝应留在操作回执，不应关闭整个房间。
+客户端必须同时看数值和 reason（关闭原因字符串）：同为 1008，`connection_timeout` 可以恢复，`protocol_violation` 应报告协议问题。不认识的组合按故障记录。浏览器的 1006 表示没有收到有效关闭帧，不是服务器能主动发送的码。
+
+上游参考已随包提供，但部分条目仍缺具体解释：`checkpoint_corrupt_manifest` 使用通用说明，`checkpoint_incomplete_group` 只列规则编号。这里只给保留数据和检查配套文件的处理方向，详细修复步骤属于上游文档缺口。
 
 ## 分层定位
 
 | 现象 | 先看 | 下一步 |
 | --- | --- | --- |
-| restore/build 失败 | 第一条编译错误、`Engine/manifest.json`、目标框架 | 先补 Engine 子模块或修生成源，不启动旧 DLL。 |
-| `LUMIO_SDK_UNRESOLVED` | `Engine/` 是否初始化、SDK nupkg 与 manifest 版本 | 运行 `git submodule update --init --depth 1 Engine`，确认版本后再构建。 |
-| Native 装载失败 | Engine Release 的 RID、BuildId、sidecar 和哈希 | 取得完整 v0.0.2 组合；不要关闭身份检查或手改 sidecar。 |
-| Native 成功但 CLR 未启动 | `Lumio.Server.HostEntry.HostEntry`、`LumioHostEntry`、runtimeconfig 和 hostfxr | 对照 [服务器配置](../../lumio-server/references/setup.md)，确认 HostEntry 来自 Engine 发布物。 |
-| 能连但进不了房 | launch 票、allocation 六项、`DS_READY` 和连接代次 | 区分 socket、准入和首帧；不要重复使用旧票。 |
-| 入场后没有实体/聊天 | 服务器入队、Tick、复制、客户端应用和表现日志 | 用同一操作 ID 逐段对齐；本地 UI 成功不能替代权威结果。 |
-| 方块或物理查询失败 | `Presence`、`HasBlockId`、`Unresolved` 和宿主绑定 | 转 [体素指引](../../lumio-voxel/SKILL.md)，不要把缺块当空气。 |
+| restore/build 失败 | 第一条编译错误、`Engine/manifest.json`、`global.json` | 补齐所需工具或修复源文件，再重新构建。 |
+| `LUMIO_SDK_UNRESOLVED` | `Engine/` 是否有 manifest 和 SDK 包 | 运行 `git submodule update --init --depth 1 Engine`。 |
+| Native（原生库）装载失败 | 发布物支持的平台、身份信息与文件校验结果 | 按 [环境与第一步](getting-started.md) 取得完整匹配的发布物。 |
+| Native 成功但托管入口未启动 | `Lumio.Server.HostEntry.HostEntry`、`LumioHostEntry` 和入口程序集 | 对照 [服务器配置](../../lumio-server/references/setup.md)。 |
+| 能连但进不了房 | launch 票（房间准入凭证）、准入日志与 `DS_READY` | 先用上表区分准入拒绝、容量不足与协议问题。 |
+| 入场后看不到实体或聊天 | 服务器收到输入、每帧处理、同步发送、客户端接收和显示 | 按 [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md) 对齐同一消息。 |
+| 配表加载失败 | 错误正文、目标端、实际导出根和清单 | 按 [配表更新](../../lumio-config/references/runtime-and-updates.md) 重新导出完整产物。 |
+| 方块或物理查询失败 | 查询状态、分区是否可用和坐标 | 转 [体素指引](../../lumio-voxel/SKILL.md)。 |
 
-## 证据模板
+## 保存可重现的记录
 
-```text
-目标端与版本：
-操作和输入（已去敏）：
-预期 / 实际：
-最早失败层与原错误：
-DS/Client/Native/程序集身份：
-重现命令与退出码：
-已验证 / 未验证：
-```
+记录命令、退出码、Sample/Engine 版本、目标端、预期结果、实际结果和最早失败日志。去掉密码、准入票、`Authorization` 与完整用户数据。进程被强制清理不代表步骤成功。
 
-限制要明确写成“能力不存在”“尚未接线”“缺运行环境”或“本次未验证”中的一种。更多 DS 日志字段和存档定位见 [服务器诊断](../../lumio-server/references/diagnostics.md)。
+日志里出现的错误码保留原样；更多服务器字段和存档定位见 [服务器诊断](../../lumio-server/references/diagnostics.md)。限制措辞见 [能力入口](capabilities.md#记录限制时怎么说)。
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

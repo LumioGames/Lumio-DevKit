@@ -6,7 +6,7 @@ license: MIT
 
 # Lumio 玩法开发
 
-这个技能说明怎样在 `Gameplay/` 写游戏规则：实体和组件描述状态，GAS 处理技能和效果，生成器把声明接到运行时注册表。先按任务读取一篇参考，不要把引擎内部实现复制到游戏仓。
+在 `Gameplay/` 写游戏规则：实体和组件描述状态，GAS（玩法技能系统）处理技能、冷却和预测，生成器把声明接到运行时注册表。按任务读取一篇参考。
 
 ## 按任务读取
 
@@ -20,11 +20,10 @@ license: MIT
 
 ## 先核对什么
 
-1. 确认当前游戏的 `Gameplay/` 布局和 SDK 版本；通用目录约定见 [项目布局](../lumio-development/references/project-layout.md)。
-2. 共享声明放在没有端后缀的文件，服务器和客户端的实现分别放在 `.Server.cs` 与 `.Client.cs`；不要手改 `generated/`。
-3. 技能、冷却、消耗与预测都走 GAS。体素格子只保存方块，库存、储量和生命周期放在实体组件；需要固定位置又有逻辑时使用方块实体。
-4. 编译生成结果后再做真实 Host 验证。文件存在或生成注册表出现，不等于网络、预测或冷恢复已经跑通。
+1. 确认游戏目录与引擎版本，见 [项目布局](../lumio-development/references/project-layout.md)。
+2. 示例只摘自本页基线上的 Sample，保留相对路径和提交号；示例中尚未提供的能力不要编造。
+3. 共享声明与 `.Server.cs` / `.Client.cs` 按端编译；改声明后重新构建，不手改 `generated/`。
 
-服务端和客户端的宿主接入分别见 [lumio-server](../lumio-server/SKILL.md) 与 [lumio-client](../lumio-client/SKILL.md)；体素读写和缺块处理见 [lumio-voxel](../lumio-voxel/SKILL.md)。
+宿主接入见 [lumio-server](../lumio-server/SKILL.md) 与 [lumio-client](../lumio-client/SKILL.md)；体素读写和缺块处理见 [lumio-voxel](../lumio-voxel/SKILL.md)。
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

@@ -16,14 +16,12 @@
 
 ## 按顺序学
 
-1. **入门**： [世界模型](plugin/skills/lumio-development/references/capabilities.md) · [环境与第一步](plugin/skills/lumio-development/references/getting-started.md) · [项目布局](plugin/skills/lumio-development/references/project-layout.md) · [升级引擎](plugin/skills/lumio-development/references/getting-started.md#升级引擎)
+1. **入门**： [世界模型](plugin/skills/lumio-development/references/capabilities.md) · [环境](plugin/skills/lumio-development/references/getting-started.md) · [跑示例](plugin/skills/lumio-development/references/getting-started.md#跑示例十四步导览) · [从模板建游戏](plugin/skills/lumio-development/references/getting-started.md#从模板建游戏) · [升级引擎](plugin/skills/lumio-development/references/getting-started.md#升级引擎)
 2. **概念**： [实体与组件](plugin/skills/lumio-gameplay/references/entities-and-components.md) · [同步与 RPC](plugin/skills/lumio-gameplay/references/sync-and-rpc.md) · [GAS 技能](plugin/skills/lumio-gameplay/references/gas-abilities.md) · [Tick](plugin/skills/lumio-gameplay/references/tick.md)
 3. **教程**： [Sample 十四步逐步索引](plugin/skills/lumio-development/references/getting-started.md#十四步逐步索引) · [代码生成](plugin/skills/lumio-gameplay/references/code-generation.md) · [体素操作](plugin/skills/lumio-voxel/SKILL.md)
 4. **操作**： [Dedicated Server 配置](plugin/skills/lumio-server/references/setup.md) · [本地 Platform 与启动器](plugin/skills/lumio-server/references/development.md) · [日志](plugin/skills/lumio-development/references/diagnostics.md)
 5. **参考**： [SDK XML/API](plugin/skills/lumio-development/references/getting-started.md#查公开参考) · [错误码和关闭原因](plugin/skills/lumio-development/references/diagnostics.md#按症状查错误码) · [配表 CLI](plugin/skills/lumio-config/references/edit-and-export.md)
 6. **排障**： [分层诊断](plugin/skills/lumio-development/references/diagnostics.md) · [服务器诊断](plugin/skills/lumio-server/references/diagnostics.md) · [客户端诊断](plugin/skills/lumio-client/references/diagnostics.md) · [体素查询](plugin/skills/lumio-voxel/references/queries.md)
-
-这一节只负责导航，操作细节留在对应指引中。
 
 ## 安装
 
@@ -76,7 +74,9 @@ Lumio-DevKit/
 
 ## 当前阶段
 
-本轮基线是 **LumioEngineRelease v0.0.2** 与 **LumioSample origin/main `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`**，核对日期为 **2026-09-27**。Sample 的十四步入口是 `Tools/launcher.mjs`，公开仓库前置条件为 Git、.NET SDK、Node 和 Docker；每步是否真实通过以 [验证记录](plugin/VERIFICATION.md) 为准。引擎二进制、平台账号和准入票仍需按分发渠道取得，文档不会把静态存在写成双端运行通过。
+插件版本 **0.3.0**，核对 **LumioEngineRelease v0.0.2** 与 **LumioSample origin/main `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`**。公开示例通过 `Engine/` 子模块取得引擎，`Tools/launcher.mjs` 自动启动本地 Platform、登录并运行十四步；前置条件是 Git、.NET SDK、Node 和 Docker。
+
+本次干净检出的 Sample、客户端 Gameplay 和 Bot 在 Windows 编译通过，发布物和方块资产检查通过；手册检查通过，20 项仓内测试在 WSL/Linux 通过。Windows 原生安装器有 3 项既有失败。已在 WSL 尝试十四步，因本机 RID 与发布名单不匹配而报告 `BLOCKED_ENV`，完整导览未通过。命令、基线表和上游缺口见 [验证记录](plugin/VERIFICATION.md)。
 
 ## 维护
 
@@ -87,3 +87,5 @@ Lumio-DevKit/
 - [来源与许可证](plugin/NOTICE.md)
 
 本仓原创内容采用 [MIT](LICENSE)。插件不分发引擎二进制。
+
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对、编译、启动预检；完整导览未通过）

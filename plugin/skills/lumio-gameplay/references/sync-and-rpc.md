@@ -1,35 +1,42 @@
 # 同步与 RPC
 
-同步决定某个字段由哪些客户端看到；RPC（Remote Procedure Call，远程过程调用）传递一次操作或事件。先选字段范围，再把声明和端实现拆开，最后核对生成的注册表。
+同步让指定客户端收到持续变化的字段；RPC（Remote Procedure Call，远程过程调用）传递一次操作或事件。
 
 ## 用聊天走一遍
 
-Sample 的聊天是一个最小的客户端到服务器再回到房间的例子：
+1. `Gameplay/Components/Chat/ChatComponent.cs` 把 `SendMessage(string text)` 声明为 `[ServerRpc("chat.input")]`，把 `OnChatMessage(string line)` 声明为 `[ClientRpc(Scope.Room)]`。
+2. `Gameplay/Components/Chat/ChatComponent.Client.cs` 的 `Say(string text)` 调用 `SendMessage`，由生成代码发送到服务器。
+3. `Gameplay/Components/Chat/ChatComponent.Server.cs` 实现 `SendMessage`：拒绝空文本，以及“实体 ID + 文本”合成后超过 512 个 UTF-8 字节的聊天行，保存 `LastMessageText`、`LastMessageTick`，再调用 `OnChatMessage(line)`。
+4. 服务器把这一行发给房间接收者；客户端的 `OnChatMessage` 把它写入日志。新进房间的人不会通过这次 RPC 自动补收历史聊天；两个保存字段本身使用 `Scope.None`，也不上网。
 
-1. `Gameplay/Components/Chat/ChatComponent.cs` 的共享声明标记 `SendMessage(string text)` 为 `[ServerRpc("chat.input")]`，并标记 `OnChatMessage(string line)` 为 `[ClientRpc(Scope.Room)]`。
-2. 客户端在 `Gameplay/Components/Chat/ChatComponent.Client.cs` 调用 `Say(string text)`；这个包装记录日志后调用共享的 `SendMessage`。
-3. 服务器在 `Gameplay/Components/Chat/ChatComponent.Server.cs` 实现 `SendMessage(string text)`，拒绝空文本和超过 UTF-8 限制的行，写入 `LastMessageText`、`LastMessageTick`，再调用 `OnChatMessage(line)`。
-4. 生成的 `Gameplay/generated/server/Lumio.Sample.Gameplay.Registry.g.cs` 把 `ChatComponent.SendMessage` 映射为 `chat.input`。这条映射只说明操作进入服务器分发器；需要真实房间才能验证消息是否被另一客户端看到。
+共享声明摘自 [`Gameplay/Components/Chat/ChatComponent.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Components/Chat/ChatComponent.cs)，提交 `f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb`，许可证 Apache-2.0：
+
+```csharp
+    [ServerRpc("chat.input")]
+    public partial void SendMessage(string text);
+```
 
 ## 字段该同步给谁
 
+`Scope`（接收范围）决定读者；`Authority`（允许从哪一侧发起字段写入）决定写者；`[Persist]` 决定是否存档。三者不能混为一谈。
+
 | 声明 | 玩家看到的结果 | Sample 位置 |
 | --- | --- | --- |
-| `Scope.Aoi` | 持有该实体所在 Section 的观察者看到，例如箱子的 `Name`、`Locked` 和矿脉的 `Remaining`。离开视野后不再收到该 AOI（Area of Interest，视野范围）内的更新。 | `Gameplay/Components/Box/BoxComponent.cs`、`Gameplay/Components/Vein/VeinReserveComponent.cs` |
-| `Scope.Room` | 房间内的观察者看到，例如 `OrePileComponent.Amount`、`IdentityComponent.Name` 与 `ColorHue`。 | `Gameplay/Components/Ore/OrePileComponent.cs`、`Gameplay/Components/Identity/IdentityComponent.cs` |
-| `Scope.Claim` | 只有 `claimBy` 指定的成员看到。箱子打开时，服务器把连接的 `NetEntityId` 加入 `Openers`，Runtime 再发库存的 granted；关闭时移除并 revoked。 | `Gameplay/Components/Box/BoxComponent.cs`、`Gameplay/Components/Box/BoxComponent.Server.cs` |
-| `Scope.None` | 不上网；可用于服务器账本或临时成员，例如 `Openers` 和 `PendingDigComponent` 的字段。 | `Gameplay/Components/Box/BoxComponent.cs`、`Gameplay/Components/Mining/PendingDigComponent.cs` |
+| `Scope.Aoi` | AOI（Area of Interest，视野范围）内的观察者接收。对于箱子和矿脉，这取决于玩家是否订阅它所在的 Section（地图分块）。 | `Gameplay/Components/Box/BoxComponent.cs` 的 `Name`、`Locked`；`Gameplay/Components/Vein/VeinReserveComponent.cs` 的 `Remaining`。 |
+| `Scope.Room` | 房间观察者接收，无需因字段本身而限定到箱子所在分块。 | `Gameplay/Components/Ore/OrePileComponent.cs` 的 `Amount`；`Gameplay/Components/Identity/IdentityComponent.cs` 的 `Name`、`ColorHue`。 |
+| `Scope.Claim` | 只有 `claimBy` 指定的成员接收。服务器把连接的 `NetEntityId`（网络实体身份）加入箱子的 `Openers` 时，该连接收到当前完整库存与 `granted`（授予查看资格）；移除时收到 `revoked`（撤销查看资格）。 | `Gameplay/Components/Box/BoxComponent.cs` 的 `Inventory` 与 `Openers`；`Gameplay/Components/Box/BoxComponent.Server.cs` 的 `Open`、`Close`。 |
+| `Scope.None` | 不上网。可以存服务器临时状态，也可以配合 `[Persist]` 保存服务器状态。 | 箱子的 `Openers` 不保存；`Gameplay/Components/Mining/PendingDigComponent.cs` 的等待记录保存。 |
 
-`[Persist]` 与 `Scope` 是两件事：`[Persist]` 表示保存，`Scope` 表示复制范围。比如 `BoxComponent.Inventory` 两者都有，`Openers` 两者都没有；服务器重启后不会恢复谁正在打开箱子。
+`IdentityComponent.Name` 为 `Scope.Room, Authority.Owner`，`ColorHue` 为 `Scope.Room, Authority.Server`：两者接收范围相同，写入来源不同。`Scope.Owner`（只给所属连接）的业务字段用例在示例中尚未提供，不要根据 `Authority.Owner` 推断名字只对自己可见。
+
+在玩家眼里，靠近矿脉并订阅相应分块后能获得该处实体与显示字段，离开订阅范围后不再持续收到它的 AOI 更新。进入箱子所在区域能看到名字与锁，不代表已经获准看库存；开箱者列表本身一直留在服务器。客户端界面应随订阅变化和查看资格撤销移除旧内容，不能继续把缓存当作最新值。
 
 ## 双端文件怎么拆
 
-共享文件放声明和双方都需要的字段；同名 partial 类型的 `.Server.cs` 只放服务器代码，`.Client.cs` 只放客户端代码。Sample 的 `Directory.Build.targets` 会在服务器侧排除 `**/*.Client.cs`，在客户端侧排除 `**/*.Server.cs`。不要把服务器写入藏在共享声明里，也不要让客户端直接改权威字段。
+共享 `.cs` 放双方需要的声明和逻辑；同名 `partial`（一个类型分到多个文件）实现按端放置。Sample 的 `Directory.Build.targets` 在服务器编译排除 `**/*.Client.cs`，在客户端编译排除 `**/*.Server.cs`。`ChatComponent` 因此由服务器实现入站方法、客户端实现显示方法，另一侧调用的发送代码由生成器补齐。
 
-玩家看到的 AOI 结果取决于其 Section 订阅和实体字段的 `Scope`：同一个方块实体可以让所有附近观察者看到 `Name`，只让当前 `Openers` 看到 `Inventory`，把 `Openers` 本身留在服务器。实体离开观察范围时，客户端不能把本地缓存当成最新权威值。
+修改 RPC 后按 [代码生成](code-generation.md) 构建两端，检查 `Gameplay/generated/server/Lumio.Sample.Gameplay.Registry.g.cs` 仍把 `ChatComponent.SendMessage` 映射为 `chat.input`。客户端输入到达服务器后仍要检查权限、目标和内容，不把“能收到调用”当作“允许执行”。
 
-RPC 是一次调用，不是长期状态。若新加入的观察者必须得到当前值，应使用带正确 `Scope` 的 `Sync<T>`；若只是通知一次聊天行，使用 `ClientRpc`。服务器入站 RPC 仍需做目标、权限和内容检查。
+需要新加入者得到当前值时使用 `Sync<T>`（同步单值）或 `SyncList<T>`（同步列表）；一次聊天通知使用 RPC。若对端看不到变化，依次检查字段范围、Section 订阅或 `Openers` 成员、两端构建版本；聊天再查 `chat.input` 映射、字节长度与两端日志。宿主连接见 [客户端技能](../../lumio-client/SKILL.md)，服务端运行与日志见 [服务器技能](../../lumio-server/SKILL.md)。
 
-更完整的宿主连接与客户端表现见 [lumio-client](../../lumio-client/SKILL.md)；服务器生命周期和日志见 [lumio-server](../../lumio-server/SKILL.md)。
-
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

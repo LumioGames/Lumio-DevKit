@@ -1,35 +1,39 @@
-# 能力入口与当前证据范围
+# 世界模型与能力入口
 
-核对日期为 **2026-09-27**；精确签名以实际使用的 Engine v0.0.2 XML 为准。接口、生成物和真实运行是三种不同证据。
+世界模型帮你决定一个游戏对象应该做成方块还是实体，以及玩法逻辑该放在哪里。
+
+以玩家打开箱子、挖矿和捡矿为例：
+
+1. 地面和箱子占据的格子是方块（体素，按格子存储的地形）。
+2. 箱子的物品和开关状态需要服务器管理，因此另外有一个实体（带身份、组件和逻辑的游戏对象）。箱子方块保存一条指向这个实体的引用。
+3. 玩家、矿脉和掉落矿石也是实体；组件（挂在实体上的一组数据和行为）保存它们各自的状态。
+4. 玩家通过 GAS（挂在实体上的技能系统）挖矿、支付体力、进入冷却，再拾取矿石。技能、冷却和预测都走这套组件。
+5. 只有客户端显示、服务器无需知道的对象可以是本地实体；它仍是实体，不是世界的第三种东西。
 
 ## 世界里只有两种东西
 
-- 静态、不动、没有服务器逻辑的地形是体素。
-- 会动或需要服务器逻辑的角色、矿脉、掉落物是实体。
-- 只在客户端显示的火花、提示等是 Local Entity。
-- 固定占格但有库存的箱子：占格是体素，库存和开关逻辑是实体，两者靠稀疏引用关联。
-- 技能、冷却、属性、效果和预测都由实体上的 GAS 组件承载；Sample 没有 Gameplay Tags 声明，标签能力以 Engine v0.0.2 的公开 XML/API 为准。
+静态地形用方块；会动或需要服务器逻辑的对象用实体。不动但有逻辑的箱子同时需要方块和实体，分别承担占格和逻辑。Sample 的 [`Gameplay/EntityTypes/BoxEntity.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/EntityTypes/BoxEntity.cs) 和 `Gameplay/Components/Box/BoxComponent.cs` 展示箱子声明；声明与同步规则见 [实体与组件](../../lumio-gameplay/references/entities-and-components.md)。
 
-## 找入口
+## 按任务找入口
 
-| 需求 | 公开入口 | 证据边界 |
+| 要做的事 | Sample 入口 | 接着读 |
 | --- | --- | --- |
-| 实体、组件和本地实体 | `Gameplay/EntityTypes/**`、`Gameplay/Components/**`、ECS XML | Sample 有声明和生成输出；创建、复制和表现仍需 Host 运行证据 |
-| 同步与 RPC | `.Server.cs`/`.Client.cs`、生成的 Sync/Registry | 字段的 Scope 由 Runtime 解释；代码存在不等于客户端已收到 |
-| 技能与预测 | `Gameplay/Abilities/**`、`Gameplay/Effects/**`、GAS XML | `MineAbility` 的地形预测与 `PickupAbility` 的权威效果有真实声明；回滚是否接通要看运行结果 |
-| Tick 与系统 | `Gameplay/SampleMiningSystem.Server.cs`、Simulation XML | 系统顺序以发布物 Tick 合同为准；单元测试不证明跨进程时序 |
-| 体素读写和查询 | `lumio-voxel` skill、Engine XML | `BlockId` 是 `uint`；Pending/Unavailable/Unresolved 不能当空气 |
-| DS 与存档 | `Server/Config/Startup/server.json`、`Tools/launcher.mjs` | 需要同一版本的 DS、HostEntry、Runtime、Native 和存储目录 |
-| 方块资产 | `Client/Assets/Blocks/`、`Tools/check-block-assets.mjs` | 资产契约和检查器可静态核对；实际 WebGL2 画面仍需运行验证 |
-| 配表 | LumioConfig CLI 与 `Server/Config/Tables`/`Client/Config/Tables` | 导出和 Reader 成功不等于 DS 已激活该快照 |
+| 定义实体、组件和本地实体 | `Gameplay/EntityTypes/`、`Gameplay/Components/` | [实体与组件](../../lumio-gameplay/references/entities-and-components.md) |
+| 同步字段、聊天与远程调用 | `Gameplay/Components/Chat/` | [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md) |
+| 挖矿、捡矿、效果和预测 | `Gameplay/Abilities/`、`Gameplay/Effects/` | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 安排每帧系统顺序 | `Gameplay/SampleMiningSystem.Server.cs` | [每帧顺序](../../lumio-gameplay/references/tick.md) |
+| 地图、体素读写和物理查询 | `Server/Assets/Maps/` | [体素](../../lumio-voxel/SKILL.md) |
+| 启动服务器、配置存档 | `Server/Config/Startup/server.json`、`Tools/launcher.mjs` | [服务器配置](../../lumio-server/references/setup.md) |
+| 接入方块资产 | `Client/Assets/Blocks/`、`Tools/check-block-assets.mjs` | [美术](../../lumio-art/SKILL.md) |
+| 修改玩法数值 | `Gameplay/Tables/`、`Server/Config/Tables/`、`Client/Config/Tables/` | [配表](../../lumio-config/SKILL.md) |
 
-### 四种限制措辞
+## 记录限制时怎么说
 
-- **能力不存在**：Engine v0.0.2 没有该公开类型或命令。
-- **尚未接线**：Sample 有声明，但 Host/消费者没有提供运行输入。
-- **缺运行环境**：缺 Docker、Platform、Engine 产物或准入票。
-- **本次未验证**：没有执行对应命令或场景。
+- **能力不存在**：发布物没有所需的公开类型或命令。
+- **尚未接线**：已有声明，但项目没有把它接入实际运行流程。Sample 未展示的用法写“示例中尚未提供”。
+- **缺运行环境**：缺少 Docker、发布物或其他启动必需项。
+- **本次未验证**：本次没有执行相应命令或场景。
 
-不要用 `Recording`、`Fake` 或“有一个接口”推断生产能力；追到实际构造、注入和日志。完整验证命令见 [验证记录](../../../VERIFICATION.md)。
+精确类型和方法查 [发布物参考](getting-started.md#查公开参考)，本次命令结果查 [验证记录](../../../VERIFICATION.md)。
 
-核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对 / 编译 / 真实运行）
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）
