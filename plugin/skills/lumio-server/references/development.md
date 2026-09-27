@@ -1,45 +1,40 @@
 # 开发服务端玩法并验证结果
 
-## 构建游戏的服务端侧
+服务端把玩家输入变成最终游戏结果，再让客户端看到更新。
 
-玩法工程保留在游戏仓；SDK 提供 Runtime，DS 提供进程与网络。示例的默认侧是 server，会排除 `*.Client.cs`。在通用搭建已准备好的本地 SDK feed 下，从 LumioSample 根目录执行：
+## 用聊天走一遍
+
+1. 玩家 A 发送聊天请求。
+2. `ChatComponent.Server.cs` 处理请求，产生聊天通知。
+3. 玩家 B 的客户端收到通知并显示。
+4. 核对服务器记录和接收方状态，确认消息真正送达。
+
+声明和两端文件如何组织，见 [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md)；技能、费用、冷却和预测统一见 [GAS 技能](../../lumio-gameplay/references/gas-abilities.md)。
+
+## 编译与装载
+
+在 Sample 根目录执行 [README](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/README.md) 的命令（Apache-2.0）：
 
 ```sh
-dotnet build src/Lumio.Sample.Gameplay/Lumio.Sample.Gameplay.csproj \
-  -c Release -p:LumioLocalFeed="$LUMIO_SDK_FEED" -o .run/server
+dotnet build LumioSample.slnx
 ```
 
-预期输出 `.run/server/Lumio.Sample.Gameplay.dll` 与兼容 Runtime 依赖。将 `clr.registry_assembly` 指向此游戏 DLL，Replication/Ecs 指向相同输出集，HostEntry 则仍使用 DS 分发的入口程序集。不要从不同构建目录各挑一个“名字一样”的 DLL。`LUMIO_SDK_FEED` 只是命令示例中的路径变量。
+默认构建服务端玩法，排除 `*.Client.cs`；模板 `Server/Config/Startup/server.json` 指向 `Gameplay/bin/Debug/net10.0/Lumio.Sample.Gameplay.dll`。修改为 Release 前先构建对应输出。客户端使用单独目录，见 [客户端搭建](../../lumio-client/references/setup.md)。
 
-声明写在游戏源码，生成结果由 SDK 构建步骤更新；详细 [项目布局](../../lumio-development/references/project-layout.md) 和 [能力边界](../../lumio-development/references/capabilities.md) 是共同参考。
+玩法放在 `Gameplay/`，生成文件放在 `Gameplay/generated/`。声明与生成注册表的步骤见 [代码生成](../../lumio-gameplay/references/code-generation.md)。
 
-## 从聊天确认权威执行
+## 配表与一帧顺序
 
-公开入口可阅读 [聊天声明](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/src/Lumio.Sample.Gameplay/Components/Chat/ChatComponent.cs)、[服务端实现](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/src/Lumio.Sample.Gameplay/Components/Chat/ChatComponent.Server.cs)。用户操作通过生成的 ServerRpc 接口进入；服务端写自己的数据，再产生客户端事件。
+`config_dir` 使用 `Server/Config/Tables/` 的导出结果。改源表后重新导出并核对内容指纹，操作见 [配表](../../lumio-config/SKILL.md)。
 
-最小人工验证：
+Sample 世界帧率声明在 [Gameplay/EntityTypes/WorldEntity.cs](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/EntityTypes/WorldEntity.cs)，是 `TickRateHz = 20`，生成注册表据此报告帧率。不要在宿主或玩法中另起时钟推进世界。挖掘、体素提交与掉落的先后关系见 [每帧顺序](../../lumio-gameplay/references/tick.md)。
 
-1. 起一个明确的测试房间，记录 Ready 的版本与内容指纹。
-2. 用两个不同账号取得各自房间票，连接两个独立客户端；确认两者都 Active。
-3. 客户端 A 发送一条可识别的短聊天。对齐上行、服务器处理日志与客户端 B 的已提交聊天窗口。
-4. 再发送一次无效输入，确认该次操作有可定位拒绝，后续合法输入仍能执行。不要把断开整房间作为拒绝反馈。
+## 保存与重启验证
 
-Sample 的现有服务端聊天对空文本和超长内容直接返回，尚未提供上述完整拒绝反馈；现有例子不能证明这一验收项已满足。长文本还受到 UTF-8 wire 长度限制，字符数不能代替字节数。
+按 [搭建](setup.md) 运行完整导览，分别检查聊天、移动、挖掘和拾取。第十四步会停止 DS，在同一存储目录上重启，再由 `SampleRestoreVerifyScenario` 核对恢复后的世界。
 
-## 配表、Tick 与世界能力
+检查 `DS_CHECKPOINT`、`DS_STOPPED` 与恢复结果；仅有检查点文件不足以说明格子、实体和库存都恢复正确。失败时保留原存储目录，按 [排障](diagnostics.md) 找首次错误。
 
-`config_dir` 指向 export，不是源表随意存放的目录。启动期间会校验 manifest 身份并调用 Runtime 装载；错误通过 `config_load_failed` 的 detail 暴露。检查 Ready 的 `contentFingerprint`，再在实际玩法读表路径确认读到了目标行和值。当前 Host 不传必需表清单，不能声称 DS 已替游戏校验全部“必需表”；装载成功也不能替代玩法消费证明。
+源码入口：[聊天服务端](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/Components/Chat/ChatComponent.Server.cs)、[恢复验证场景](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/Bots/SampleRestoreVerifyScenario.cs)、[导览判定](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Tools/tour-steps.mjs)。
 
-调 Tick 时以世界提供的 `tickRate` 为准。当前 DS 要求 `1000 % tickRate == 0`，例如 50 Hz 可整除，60 Hz 会拒绝 Ready。可选 `clr.tick_rate_hz` 会影响启动世界配置；不要另加 `host.tick_hz`，也不要改宿主循环模拟另一个逻辑时钟。
-
-Sample 有移动与挖掘声明，但当前 Bot Activate、真实物理端口和完整十四步仍有缺口。`world_profile=runtime+voxel` 只有在 Runtime 返回有效体素世界后才 Ready；若缺能力，应明确报告，不将其改为 runtime-only 后声称玩法可用。
-
-## 保存与重启验证要单独安排
-
-正常运行的周期检查点会输出 `DS_CHECKPOINT` 与 generation；它证明这一组存储发布完成，不自动证明客户端状态、底图语义或冷恢复正确。`runtime+voxel` 要求同一组中具备 Runtime 和 Voxel 两半，不能只保存 ECS。
-
-要验证保存，先确认本次任务允许停机和使用该测试目录，然后正常停止前台进程（Ctrl+C，或向选定进程发 SIGTERM），等待 `DS_STOPPED` 和退出 0。强杀不是正常收尾证据。保留这一组检查点，再按明确的恢复测试计划启动并比较挖过的格子、实体身份与数值，而不只比较一个哈希。
-
-**启动恢复行为：**当前 `lumio-ds` 启动会读取所配置 `store_path` 中可用检查点；同身份组损坏时可能选择更旧的完整组，不同身份则拒绝。CLI 没有独立的“只启动、不恢复”开关。按配置冷启动恢复与显式存读档都是独立流程，不属于操作失败后自动恢复上一帧。应记录实际选中的 generation 与恢复结果；不要通过循环启动、删除最新组或换空目录掩盖失败，也不要据此重放结果未知的旧操作。
-
-当前 `async` / `snapshot_only` 不能证明每次已接受操作都耐久；`durable` 仅在支持的平台按文件/目录同步提供更强检查点保证。游戏对存档的要求应依据实际发布能力，不根据配置名字作承诺。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

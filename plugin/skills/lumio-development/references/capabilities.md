@@ -1,52 +1,39 @@
-# 能力入口与当前证据范围
+# 世界模型与能力入口
 
-这张表帮助你选入口，不维护第二套任务进度。核对日期 **2026-09-14**；精确 API 以使用中的 SDK 包为准，运行证据必须对应实际产物。
+世界模型帮你决定一个游戏对象应该做成方块还是实体，以及玩法逻辑该放在哪里。
 
-## 先判断世界里是什么
+以玩家打开箱子、挖矿和捡矿为例：
 
-- 不动、没有服务器逻辑的地形：体素。
-- 会动或需要服务器逻辑的角色、掉落物：实体。
-- 只在客户端显示的火花、提示等：Local Entity。
-- 固定位置但有库存等逻辑的物件：体素占格、实体持逻辑，通过公开绑定关联。
+1. 地面和箱子占据的格子是方块（体素，按格子存储的地形）。
+2. 箱子的物品和开关状态需要服务器管理，因此另外有一个实体（带身份、组件和逻辑的游戏对象）。箱子方块保存一条指向这个实体的引用。
+3. 玩家、矿脉和掉落矿石也是实体；组件（挂在实体上的一组数据和行为）保存它们各自的状态。
+4. 玩家通过 GAS（挂在实体上的技能系统）挖矿、支付体力、进入冷却，再拾取矿石。技能、冷却和预测都走这套组件。
+5. 只有客户端显示、服务器无需知道的对象可以是本地实体；它仍是实体，不是世界的第三种东西。
 
-GAS 依附实体管理技能、效果与预测。表现坐标与逻辑状态不能各自成为服务器权威；材质的外观也不能替代碰撞属性。
+## 世界里只有两种东西
 
-## 找能力
+静态地形用方块；会动或需要服务器逻辑的对象用实体。不动但有逻辑的箱子同时需要方块和实体，分别承担占格和逻辑。Sample 的 [`Gameplay/EntityTypes/BoxEntity.cs`](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Gameplay/EntityTypes/BoxEntity.cs) 和 `Gameplay/Components/Box/BoxComponent.cs` 展示箱子声明；声明与同步规则见 [实体与组件](../../lumio-gameplay/references/entities-and-components.md)。
 
-| 需求 | 使用入口 | 当前可确认的范围与限制 |
+## 按任务找入口
+
+| 要做的事 | Sample 入口 | 接着读 |
 | --- | --- | --- |
-| 声明实体与组件 | SDK ECS 声明、注册表生成；Sample EntityTypes/Components | 公开模板有声明和双端生成路径；创建、上线、同步仍需实际 Host 运行证明 |
-| 技能、属性、消耗和效果 | GAS，Sample Abilities/Effects | 有公开声明与消费代码；模板移动物理仍有测试装配，不能直接当完整真实碰撞示范 |
-| 客户端连接、聊天与同步 | 分发的客户端/Bot；[客户端](../../lumio-client/SKILL.md) | 启动进程、完成准入、收到实体、正确表现是不同结果；部分玩法输入路径尚有限制 |
-| 服务器世界与存档 | 分发的 DS、游戏配置；[服务器](../../lumio-server/SKILL.md) | 要匹配 Native 与 Managed 产物；一次 Hello 测试不证明完整游戏或所有耐久档 |
-| 体素读写、绑定与地形查询 | SDK 体素公开面；[体素](../../lumio-voxel/SKILL.md) | 接口和适配存在；宿主必须提供真实世界及查询绑定，未就绪不等于空气；球与 AABB 不等价 |
-| 配表导出与类型读取 | 公开 Config CLI + SDK Loader；[配置表](../../lumio-config/SKILL.md) | 工具可独立使用；读取需正确端投影、Reader 与 Loader，文件导出不等于运行世界已切换 |
-| 定时、状态机、空间查询 | SDK 对应 facade；包内公开参考 | 有公开包装与消费者；测试用 ABI 实现不等于 Native 联测，不在玩法层另造迁移或计时算法 |
-| 美术制作与交接 | [美术](../../lumio-art/SKILL.md) | 指引提供工作流；具体资源格式、导入器、预算按目标客户端实际能力确认 |
+| 定义实体、组件和本地实体 | `Gameplay/EntityTypes/`、`Gameplay/Components/` | [实体与组件](../../lumio-gameplay/references/entities-and-components.md) |
+| 同步字段、聊天与远程调用 | `Gameplay/Components/Chat/` | [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md) |
+| 挖矿、捡矿、效果和预测 | `Gameplay/Abilities/`、`Gameplay/Effects/` | [GAS 技能](../../lumio-gameplay/references/gas-abilities.md) |
+| 安排每帧系统顺序 | `Gameplay/SampleMiningSystem.Server.cs` | [每帧顺序](../../lumio-gameplay/references/tick.md) |
+| 地图、体素读写和物理查询 | `Server/Assets/Maps/` | [体素](../../lumio-voxel/SKILL.md) |
+| 启动服务器、配置存档 | `Server/Config/Startup/server.json`、`Tools/launcher.mjs` | [服务器配置](../../lumio-server/references/setup.md) |
+| 接入方块资产 | `Client/Assets/Blocks/`、`Tools/check-block-assets.mjs` | [美术](../../lumio-art/SKILL.md) |
+| 修改玩法数值 | `Gameplay/Tables/`、`Server/Config/Tables/`、`Client/Config/Tables/` | [配表](../../lumio-config/SKILL.md) |
 
-模板不是“所有功能已完成”的证据。发现 `Recording`/`Fake` 等实现时追到实际构造和注入处，不凭类名推断生产正在使用，也不凭接口存在推断宿主已经注入。
+## 记录限制时怎么说
 
-## 每次验证把结论说具体
+- **能力不存在**：发布物没有所需的公开类型或命令。
+- **尚未接线**：已有声明，但项目没有把它接入实际运行流程。Sample 未展示的用法写“示例中尚未提供”。
+- **缺运行环境**：缺少 Docker、发布物或其他启动必需项。
+- **本次未验证**：本次没有执行相应命令或场景。
 
-用普通句子记录以下事实，不需要新增成熟度编号：
+精确类型和方法查 [发布物参考](getting-started.md#查公开参考)，本次命令结果查 [验证记录](../../../VERIFICATION.md)。
 
-- “签名已在所用 SDK 中找到”——说明包版本和入口。
-- “游戏已调用并注入真实提供方”——说明实例、端和装配位置。
-- “局部测试执行通过”——写命令、用例数量以及替身范围。
-- “双端场景运行通过”——写输入、观察结果和实际二进制身份。
-- “本机尚未取得 Bot 分发物，双端未执行”——保持未知，不写通过。
-
-普通业务拒绝反馈本操作，不自动停止其他玩家。内部异常、发布结果未知和已提交后的通知错误应保留原身份及提交事实；不要用自动重试、回滚上一帧或返回成功来掩盖问题。旧包可能尚未实现这条行为边界，出现差异时记录版本与反例并报告维护方。
-
-## 资料与证据的分工
-
-手册解释使用方法；SDK XML/公开参考定义该版本的调用面；测试与运行报告证明具体行为。某一层不能替代其它层。
-
-阅读基线：
-
-- [Sample b236d2e](https://github.com/LumioGames/LumioSample/tree/b236d2e12206dd1f5b12a9958810d92c2f49f13c)
-- [Config f0dba85](https://github.com/LumioGames/LumioConfig/tree/f0dba85efc2a3935fa0ab18c643d49523166ff4e)
-- [Game 导航](https://github.com/LumioGames/LumioGame)
-- [本插件验证记录](../../../VERIFICATION.md)
-
-以上固定引用是本次阅读证据，不要求游戏把依赖锁到这些提交。后续更改应重新核对相关段落，避免把旧样例缺口继续当新版本事实。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）
