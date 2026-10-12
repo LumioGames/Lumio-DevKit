@@ -2,6 +2,8 @@
 
 **Lumio 游戏开发 Agent 插件，也是面向开发者的公开使用手册。** 人和 Agent 使用同一份 Markdown；人从本页阅读，Agent 从各个 `SKILL.md` 进入。
 
+完整游戏示例：[LumioSample](https://github.com/LumioGames/LumioSample)（十四步参考实现与启动入口）。
+
 ## 从你要做的事情开始
 
 | 我要做什么 | 入口 |
