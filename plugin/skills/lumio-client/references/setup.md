@@ -1,65 +1,42 @@
 # 搭建与运行客户端
 
-适用范围：使用已取得的 SDK 与客户端宿主产物。核对日期为 2026-09-14；通用包取得、版本与工具链见 [开始开发](../../lumio-development/references/getting-started.md)。当前不能假设干净机器从 nuget.org 就能取得所需包。
+Sample 用 Bot（自动操作的客户端）走完游戏流程，也提供浏览器旁观页面。
 
-## 准备实际产物
+## 跑完十四步
 
-除游戏项目外，需要同一发布的 `Lumio.Client.Bot.Host.dll`、其 `.deps.json` / `.runtimeconfig.json` 和依赖程序集；真实连接还需要匹配平台架构的 Native 动态库及其身份 sidecar。仅有 `Lumio.Engine.SDK` 并不证明这些 Host 产物也已交付。缺少产物时向分发方取得完整客户端包，不添加私有源码路径作为公开搭建步骤。
+前置条件是 Git、[global.json](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/global.json) 要求的 .NET SDK、Node.js 22 和 Docker。引擎通过 `Engine/` 子模块取得；本机平台须是发布物提供的 `win-x64` 或 `linux-x64`。首次获取见 [开始开发](../../lumio-development/references/getting-started.md)。
 
-公开阅读样本：[LumioSample 固定版本](https://github.com/LumioGames/LumioSample/tree/b236d2e12206dd1f5b12a9958810d92c2f49f13c)。示例使用 .NET 10；在按通用指南准备好本地 SDK feed 后，从示例根目录编译客户端：
-
-```sh
-dotnet build src/Lumio.Sample.Gameplay/Lumio.Sample.Gameplay.csproj \
-  -c Release -p:LumioEcsSide=client \
-  -p:LumioLocalFeed="$LUMIO_SDK_FEED" -o .run/client
-```
-
-`LUMIO_SDK_FEED` 是本例约定的本地 feed 路径变量，不是 SDK 自动识别的配置键；实际传入的是 `LumioLocalFeed`。预期输出 `.run/client/Lumio.Sample.Gameplay.dll` 及依赖。`LumioEcsSide=client` 选择客户端生成声明并排除 `*.Server.cs`；默认构建是服务器侧。服务器输出放另一个目录，避免同名 DLL 被覆盖。生成文件的边界见 [项目布局](../../lumio-development/references/project-layout.md)。
-
-## 先跑一个真实 Bot
-
-前置条件：DS 已报告 `DS_READY`；平台已为当前账号、房间和版本签发 launch 准入票；下例中的 `BOT_HOST_DLL`、`GAMEPLAY_CLIENT_DLL`、`ENGINE_NATIVE` 是本地完整路径，`DS_ENDPOINT` 来自真实就绪记录。
-
-通过安全的进程环境注入 `LumioBotAdmissionTicket`。不要把票写入 URL、版本库或示例命令文本。常驻 Bot 的启动形式为：
+在 Sample 根目录执行 [README](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/README.md) 中的命令（Apache-2.0）：
 
 ```sh
-dotnet "$BOT_HOST_DLL" \
-  --server "$DS_ENDPOINT" \
-  --gameplay "$GAMEPLAY_CLIENT_DLL" \
-  --engine-native "$ENGINE_NATIVE" \
-  --account-from Bot01 --account-to Bot01 \
-  --log-dir .run/bot01 --log-min-level debug
+dotnet build LumioSample.slnx
+dotnet build Gameplay/Lumio.Sample.Gameplay.csproj -p:LumioEcsSide=client
+dotnet build Client/Bots/Lumio.Sample.Bots.csproj
+node Tools/launcher.mjs --bots 2 --stagger-ms 250 --scenario-dll Client/Bots/bin/Debug/net10.0/Lumio.Sample.Bots.dll
 ```
 
-账号名必须与准入票对应；`Bot*` 账号还需要平台分配的 Bot 工具凭据。这条命令启动常驻客户端，不会因为收到 Welcome 就退出。观察 `admission-events.ndjson` 中 `admitted`，并在 DS 日志中对齐账号和连接代次。后续验证具体 RPC 或玩法结果见 [开发接缝](development.md)。
+`LumioEcsSide=client` 选择客户端代码与注册表，排除 `*.Server.cs`。服务端输出在 `net10.0`，客户端输出在 `net10.0-client`，避免互相覆盖。
 
-扩大到多账号前，先取得每个账号独立的票。常驻入口支持 `--admission-ticket` 指向账号 manifest；结构是 `accounts[]`，每项含 `loginName` 与 `launch.admissionCredential`，文件应保存在受限、忽略提交的位置。带 `--scenario` 的入口不按这个 manifest 枚举账号；当前 `--bots N` 会复用同一张票，不能把它当成 N 个独立玩家的真实压测。
+启动器负责 Platform（账号和房间服务）、DS（游戏服务器）、各账号的房间票和 Bot。第一个 Bot 使用 `SampleMiningScenario` 挖矿和拾取；第十四步重启 DS，由 `SampleRestoreVerifyScenario` 验证恢复。检查十四步结果和最终 `VERIFICATION_STATUS`，日志位置见 `EVIDENCE_PATH`。
 
-## 使用 C# 场景
+[Clean-machine tour 工作流](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/.github/workflows/tour.yml) 配置为每天及 main 推送时，在全新 Ubuntu runner 上匿名递归克隆、构建、测试并调用上述命令。这是有明确前置条件的一键导览；某次运行是否成功，查看对应工作流结果与日志。完整 `dotnet test` 还需要 Python 3.11+ 和相邻的公开 LumioConfig 检出，见 [Sample README](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/README.md)。
 
-先按 [开发接缝](development.md) 编译场景 DLL，确保它引用分发方提供的兼容 Bot API。对真实 DS 使用单 Bot：
+## 浏览器旁观页面
+
+spectator（旁观客户端）需要 .NET 的 `wasm-tools` 工作负载和支持 WebGL2 的浏览器。浏览器工程不在 `LumioSample.slnx` 中，须单独构建发布；构建命令摘自 Apache-2.0 的 [Client/UI/Spectator/README.md](https://github.com/LumioGames/LumioSample/blob/f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb/Client/UI/Spectator/README.md)：
 
 ```sh
-dotnet "$BOT_HOST_DLL" \
-  --gameplay "$GAMEPLAY_CLIENT_DLL" \
-  --scenario "$SCENARIO_DLL" --scenario-name Guide.ChatOnce \
-  --server "$DS_ENDPOINT" --engine-native "$ENGINE_NATIVE" \
-  --account-from Bot01 --bots 1 --ticks 120 --seed 17 \
-  --log-dir .run/chat-once
+dotnet build Gameplay/Lumio.Sample.Gameplay.csproj -c Release -p:LumioEcsSide=client -p:LumioBrowserReplica=true
+dotnet publish Client/UI/Spectator/host/Lumio.Sample.Client.Spectator.csproj -c Release -p:LumioEcsSide=client -p:LumioBrowserReplica=true
+node Tools/launcher.mjs --bots 2 --stagger-ms 250 --scenario-dll Client/Bots/bin/Debug/net10.0/Lumio.Sample.Bots.dll --spectator
 ```
 
-这里同样从 `LumioBotAdmissionTicket` 取房间票。预期 `result.ndjson` 写出词表、步骤、命令接收结果、上行统计与断言；`--ticks` 是场景宿主循环预算，不是“运行多少秒”。
+先完成上面的普通客户端与 Bot 构建，再执行浏览器步骤。启动命令沿用十四步的场景 DLL，并增加启动器提供的 `--spectator` 参数；单独传这个参数不能替代场景配置。浏览器玩法用 `netstandard2.1` 编译，放入 `net10.0-browser` 输出目录。启动器通过 HTTP 提供 `Client/UI/Spectator/host/bin/Release/net10.0/publish/wwwroot`，为页面注入单独旁观票；打开控制台打印的地址。
 
-只有需要明确的本地协议 fixture 时，才去掉真实连接参数并同时传入：
+默认页面是俯视图，在地址后加 `?view=blocks` 才是 WebGL2 三维方块视图。材质接入见 [美术验收](../../lumio-art/references/integration-and-review.md)。
 
-```text
---transport local-embedded --fixture foundation-happy-path
-```
+## 失败时查哪里
 
-该 fixture 只证明这一组固定会话/输入路径。它不证明 Native、平台验票、体素碰撞、存档或真实 DS 已成功。普通场景缺服务器、票或 Native 时会 `BLOCKED`（退出 8），不会自动换成 fixture；装载失败可能更早返回 20–25。
+缺 Engine 文件先初始化子模块；缺工作负载按 .NET 提示安装；白屏时查 `_framework/`、WASM 和页面资源请求。完整页面在发布目录，不能用源码目录或 `file:` 打开代替。连接、准入和业务结果的区分见 [客户端排障](diagnostics.md)。
 
-## 浏览器与 Hello 的边界
-
-当前可见浏览器路线是 .NET WASM 的 spectator，由 C# 消费副本结果，JS 绘制投影数据。启动它还需要分发方提供页面与 `_framework/`；没有 WASM 产物的空页面不能算联调成功。网页必须通过 HTTP(S) 提供，不能直接用 `file:` 打开。真实准入票来自同源 launch 接口，不放查询参数。
-
-Hello 静态页面与 Hello Bot 是独立的教学/测试协议路径，不能替代正式 DS 准入。现有公开示例的 [完整启动器说明](https://github.com/LumioGames/LumioSample/blob/b236d2e12206dd1f5b12a9958810d92c2f49f13c/integration/README.md) 仍列有未公开的平台和启动依赖；不要把 `node integration/launcher.mjs --bots 2` 宣称为外部用户已可一键运行。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

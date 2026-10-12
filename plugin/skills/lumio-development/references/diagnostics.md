@@ -1,62 +1,49 @@
 # 日志与分层定位
 
-目标：从一次用户可见失败，找到应该检查的层和下一条证据。
+从玩家看到的症状找到最早失败的一层，保留关闭原因、错误码和前后的日志。
 
-## 先留下最小现场
+## 按症状查错误码
 
-记录应用版本、SDK/宿主版本、目标端、触发步骤、预期与实际结果，以及失败前后的日志。附构建产物身份和操作关联字段；不要上传账号口令、准入票、凭据或整份生产用户数据。
+完整码表在 [Engine v0.0.2 SDK 包](https://github.com/LumioGames/LumioEngineRelease/raw/refs/tags/v0.0.2/sdk/Lumio.Engine.SDK.0.0.2.nupkg) 内：用 ZIP 解压工具打开，阅读 `content/docs/error-codes.md`；WebSocket 的完整关闭原因、数值和处理动作在 `content/wire/ds-transport-v1.json` 的 `closeCodes` 中。关闭码映射也可直接浏览发布物的 [`web/ds-close-codes.mjs`](https://github.com/LumioGames/LumioEngineRelease/blob/v0.0.2/web/ds-close-codes.mjs)。以下只选常见症状。
 
-先确认日志来自本次进程、配置和输出目录。不同进程的 wall-clock 时间可用于粗略检索，但不能单靠它推断 Tick 顺序或原子提交。
+| 症状 | 关闭原因或错误码 | 什么意思 | 怎么办 |
+| --- | --- | --- | --- |
+| 刚连接就被拒绝 | `not_serving`，1013 | 服务器仍在启动，这个连接尚未进入房间 | 等待 `DS_READY`；连接阶段按客户端已有逻辑有限退避重试同一地址，超限后报告失败。 |
+| 房间暂时挤不进去 | `admission_capacity`，1013 | 服务器正在服务，但待准入数、房间数或连接事件队列达到上限 | 连接阶段有限退避重试同一地址；持续失败时查服务器容量，不把它当票格式错误。 |
+| 票过期或房间不匹配 | `admission_refused`，1008 | 本次准入被拒绝，具体原因在服务器准入日志里 | 结束本次尝试，不用同一张票自动重试；核对房间与凭证，重新走平台进房流程。 |
+| 被同账号的新连接踢出 | `superseded`，1000 | 新连接取代旧连接 | 提示账号已在别处连接，不自动重连争抢会话。 |
+| 发送消息后被断开 | `protocol_violation`，1008 | 帧类型或握手顺序不符合协议 | 保存原始原因与客户端版本，修复协议用法；不自动重连掩盖错误。 |
+| 长时间无响应后断开 | `connection_timeout`，1008 | 空闲超时，服务器未收到入站帧或心跳回复 | 查网络与心跳；按客户端恢复流程取得新地址和新票后重连。 |
+| 房间运行中出现服务端故障 | `internal_error`，1011 | 连接或世界因内部故障不能继续 | 保留第一条故障日志和发布物版本，按服务端故障处理，不当普通断线或业务拒绝。 |
+| 正常结束或关服 | `shutdown` / `session_closed`，1000 | 进程正在关服，或会话已结束 | 不自动重连；需要再次进入时回平台领取房间地址。存档结果另查关服日志。 |
+| 体素暂时读不到 | `section_unavailable` | Section（16×16×16 格的体素分区）当前不可用 | 停止当前读写，核对分区是否已装载；不能把缺失数据填成空气。 |
+| 已保证就绪的区域仍读不到 | `pinned_read_returned_pending` | 已完成 pin（要求区域保持可用）后仍返回 Pending 或 Unavailable，违反就绪保证 | 保留区域、版本和宿主日志，报告该故障；不能当正常等待继续写地形。 |
+| 写地形被拒绝 | `stale_section_revision` | 写入带的分区版本已过期；存储回执也可能带了不匹配版本 | 对写入重新读取并重新判断目标后提交；对存储回执检查版本关系，不强改版本号覆盖。 |
+| 坐标或格内偏移越界 | `coordinate_out_of_bounds` / `cell_offset_out_of_range` | 坐标不在允许范围，或格内偏移不在 0–4095 | 修正坐标换算与范围检查后重新发起操作。 |
+| 一次读写太多 | `read_budget_exceeded` / `write_batch_too_large` | 超过读取预算或整批写入条数上限 | 按发布物限制拆分业务批次；不得截断请求后声称整批成功。 |
+| 带存档起不来 | `checkpoint_corrupt_manifest` / `checkpoint_incomplete_group` | 检查点清单损坏，或恢复所需的一组文件不完整 | 保留原存档、版本和第一条恢复错误，请维护者检查清单及配套文件；不要删除最新存档来掩盖失败。 |
 
-## 按最早失败层排查
+客户端必须同时看数值和 reason（关闭原因字符串）：同为 1008，`connection_timeout` 可以恢复，`protocol_violation` 应报告协议问题。不认识的组合按故障记录。浏览器的 1006 表示没有收到有效关闭帧，不是服务器能主动发送的码。
+
+上游参考已随包提供，但部分条目仍缺具体解释：`checkpoint_corrupt_manifest` 使用通用说明，`checkpoint_incomplete_group` 只列规则编号。这里只给保留数据和检查配套文件的处理方向，详细修复步骤属于上游文档缺口。
+
+## 分层定位
 
 | 现象 | 先看 | 下一步 |
 | --- | --- | --- |
-| restore/build 失败 | 第一条具体错误、feed、`global.json` | 先修依赖或生成问题，不启动旧 DLL 验证 |
-| `LUMIO_SDK_UNRESOLVED` | 模板选择的包路径及文件版本 | 按 [上手指引](getting-started.md) 检查真实包文件，缺分发物明确报告 |
-| `NETSDK1022` 且指向生成 Reader | MSBuild 的实际 Compile 项及 SDK props/targets | 检查模板与分发包是否匹配；先区分默认 glob 与显式 Include，不删生成文件掩盖重复 |
-| Native 装载失败 | sidecar、实际库路径、ABI/BuildId/二进制哈希 | 重建/取得同一组合；不要关闭校验或手改 sidecar |
-| Native 成功、CLR 未启动 | runtimeconfig、HostEntry 程序集与 .NET runtime | 转 [服务器指引](../../lumio-server/SKILL.md)，区分宿主入口与游戏程序集 |
-| 能连接、不能进入游戏 | welcome/准入结果、票来源、连接代次 | 区分 socket 连接与游戏准入，不重复发送旧票或旧代输入 |
-| 入场后看不到实体/聊天 | 服务器入队、Tick 执行、发送、客户端应用、表现 | 沿同一操作逐段对比，不用本地 UI 成功替代权威执行 |
-| 体素读取或查询失败 | presence/Unresolved、查询绑定、实例角色 | 转 [体素指引](../../lumio-voxel/SKILL.md)，不要把缺块当空气 |
-| 改表后数值未改变 | 实际 config 路径、manifest、端投影、激活快照 | 转 [配置表指引](../../lumio-config/SKILL.md)，确认导出与读取是同一份数据 |
-| 美术文件存在但画面不对 | 资源路径/请求、导入结果、绑定和目标画面 | 转 [美术指引](../../lumio-art/SKILL.md)，分开验证文件存在与客户端实际消费 |
+| restore/build 失败 | 第一条编译错误、`Engine/manifest.json`、`global.json` | 补齐所需工具或修复源文件，再重新构建。 |
+| `LUMIO_SDK_UNRESOLVED` | `Engine/` 是否有 manifest 和 SDK 包 | 运行 `git submodule update --init --depth 1 Engine`。 |
+| Native（原生库）装载失败 | 发布物支持的平台、身份信息与文件校验结果 | 按 [环境与第一步](getting-started.md) 取得完整匹配的发布物。 |
+| Native 成功但托管入口未启动 | `Lumio.Server.HostEntry.HostEntry`、`LumioHostEntry` 和入口程序集 | 对照 [服务器配置](../../lumio-server/references/setup.md)。 |
+| 能连但进不了房 | launch 票（房间准入凭证）、准入日志与 `DS_READY` | 先用上表区分准入拒绝、容量不足与协议问题。 |
+| 入场后看不到实体或聊天 | 服务器收到输入、每帧处理、同步发送、客户端接收和显示 | 按 [同步与 RPC](../../lumio-gameplay/references/sync-and-rpc.md) 对齐同一消息。 |
+| 配表加载失败 | 错误正文、目标端、实际导出根和清单 | 按 [配表更新](../../lumio-config/references/runtime-and-updates.md) 重新导出完整产物。 |
+| 方块或物理查询失败 | 查询状态、分区是否可用和坐标 | 转 [体素指引](../../lumio-voxel/SKILL.md)。 |
 
-## 去哪里找日志
+## 保存可重现的记录
 
-- 示例启动器：终端中的 `step=NN status=...` 是步骤摘要，仍需检查该步对应的 DS/Bot 原始日志。
-- DS：配置中的 `logging.dir`，相对路径的解析规则见 [服务器 skill](../../lumio-server/SKILL.md)；致命启动/退出信息也可能直接写 stderr。
-- 浏览器：开发者工具 Console 与 Network，检查 HTTP/WS 请求、关闭码和实际加载资源。
-- C# 客户端/Bot：使用该宿主显式配置的日志输出目录和终端输出，参见 [客户端 skill](../../lumio-client/SKILL.md)。
+记录命令、退出码、Sample/Engine 版本、目标端、预期结果、实际结果和最早失败日志。去掉密码、准入票、`Authorization` 与完整用户数据。进程被强制清理不代表步骤成功。
 
-不同可执行入口有各自退出码。Sample launcher 的 2 表示 `BLOCKED_ENV`，不能套用为 DS 的全部退出码；以具体入口说明为准。
+日志里出现的错误码保留原样；更多服务器字段和存档定位见 [服务器诊断](../../lumio-server/references/diagnostics.md)。限制措辞见 [能力入口](capabilities.md#记录限制时怎么说)。
 
-## 调试顺序
-
-1. 使用匹配的 Debug 产物与符号；发布包可能不附 PDB/Native 符号，此时先采日志和最小重现，再向提供方取得诊断构建。
-2. Managed 逻辑：对运行 C# 代码的进程启动或附加托管调试器。C# 在 DS 内嵌 CLR 中运行时，目标进程是 DS，不是另开一个无关的 `dotnet` 进程。
-3. 在网络输入进入处、世界入队处、实际业务处理处和客户端应用处观察同一操作。断点必须绑定到本次实际加载的程序集。
-4. Native 层使用对应平台的原生调试器与匹配符号。源码行映射不可用时，记录错误码、模块身份和边界参数；不要猜私有实现内部行为。
-5. 暂停 owner thread 可能触发心跳、准入或 watchdog 截止。把“调试器暂停造成的超时”与无调试器时的原始故障区分，使用开发环境的实际可用配置，不发明禁用开关。
-
-## 原始错误不要丢
-
-区分排队接纳、执行完成、已经提交、提交后通知失败。普通拒绝要能关联到发起操作；结果未知不能视为未执行。保留原错误码和异常链，开发诊断可含堆栈，玩家提示不显示内部堆栈。
-
-修复后复现原场景，再增加一个邻近成功场景，例如 A 被拒绝、B 仍成功；明确没有重复提交或重复副作用。实际没运行的步骤写“未执行”。
-
-## 交给维护者的最小报告
-
-```text
-目标端与版本：
-操作与输入（去掉敏感数据）：
-预期 / 实际：
-最早失败层与原错误：
-关联操作 / 连接代次 / Tick（现有日志提供什么就填什么）：
-实际库和程序集身份：
-重现命令与退出码：
-已验证 / 未验证：
-```
-
-缺少某个字段时写“未采集”，不捏造成功摘要或凭据。报告附相关日志片段即可，不要求遍历所有仓库。
+核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）
