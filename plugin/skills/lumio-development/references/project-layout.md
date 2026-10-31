@@ -63,5 +63,6 @@ Sample 的 `Directory.Build.targets` 用 `LumioEcsSide=client` 选择客户端�
 - [代码生成](../../lumio-gameplay/references/code-generation.md)
 - [服务器配置](../../lumio-server/references/setup.md)
 - [客户端构建](../../lumio-client/references/setup.md)
+- [代码写法（TypeScript 引擎）](code-style.md)
 
 核对基线：LumioSample@f98322c2eec8f83b5caf07aa2ad15d9c55b6f8fb · Engine v0.0.2 · 2026-09-27 · 验证范围（静态核对）

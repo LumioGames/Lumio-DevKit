@@ -13,6 +13,7 @@ description: 构建 Lumio 客户端玩法和 Bot 场景，运行 Sample 十四�
 | 写 Bot、提交输入、接入表现 | [客户端开发](references/development.md) |
 | 查准入、操作失败、掉线或白屏 | [日志与排障](references/diagnostics.md) |
 | 共享实体、同步与 GAS 技能 | [共享玩法](../lumio-gameplay/SKILL.md) |
+| 用 TypeScript 引擎写客户端代码（计时、订阅、缓存、重试） | [代码写法](../lumio-development/references/code-style.md) |
 
 先核对 Engine 发布物和客户端侧构建，再运行一个目标场景。分别确认进程启动、连接准入、请求被接受与服务器实际应用；接收方世界或画面是业务结果的检查点。
 
