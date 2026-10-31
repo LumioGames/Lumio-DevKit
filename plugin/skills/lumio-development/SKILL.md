@@ -17,6 +17,7 @@ license: MIT
 | 写实体、组件、同步、GAS、Tick | [共享 Gameplay](../lumio-gameplay/SKILL.md) |
 | 想知道能力是否存在、入口和限制 | [能力与证据范围](references/capabilities.md) |
 | 连接、加载、同步或执行结果异常 | [日志与分层定位](references/diagnostics.md) |
+| 用 TypeScript 引擎写游戏代码：计时、缓存、事件流、重试、模拟确定性 | [代码写法](references/code-style.md) |
 
 不为普通任务遍历整本手册。先选当前问题所属的参考，再读源码或对应领域技能。
 
@@ -26,7 +27,8 @@ license: MIT
 2. 先查已有能力和公开 API，再决定是否需要新增玩法代码。缺 SDK 分发物时说明缺什么，不生成替身使构建“成功”。
 3. 技能、冷却、消耗与预测使用 GAS（实体上的技能系统）；实体与体素按 [能力说明](references/capabilities.md) 分工。操作拒绝不自动等于整个世界故障。
 4. 使用 SDK 随附的 XML、公开 API/错误码参考和机器契约查精确签名，不从手册的说明性示例推导未提供的 API。
-5. 交回实际修改、运行命令与结果、未验证范围；使用说明变化时更新受影响的一处文档。
+5. 在 TypeScript 引擎（`lumio-engine`）上写游戏代码时，先按[代码写法](references/code-style.md)选写法：创建者持有作用域并自己销毁，一个结果用 `async / await`，事件流用 RxJS，模拟代码只用 `TickSchedule`、`det*`、`ipow` 与 `rng*`，缓存、计时、退避和监听用引擎通用库，不手写副本。
+6. 交回实际修改、运行命令与结果、未验证范围；使用说明变化时更新受影响的一处文档。
 
 ## 进入领域
 

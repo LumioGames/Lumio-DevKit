@@ -26,6 +26,7 @@
 | 启动服务器、配置存档 | `Server/Config/Startup/server.json`、`Tools/launcher.mjs` | [服务器配置](../../lumio-server/references/setup.md) |
 | 接入方块资产 | `Client/Assets/Blocks/`、`Tools/check-block-assets.mjs` | [美术](../../lumio-art/SKILL.md) |
 | 修改玩法数值 | `Gameplay/Tables/`、`Server/Config/Tables/`、`Client/Config/Tables/` | [配表](../../lumio-config/SKILL.md) |
+| 用 TypeScript 引擎（`lumio-engine`）写游戏代码 | 不适用：Sample 是 C# 项目 | [代码写法](code-style.md) |
 
 ## 记录限制时怎么说
 

@@ -13,6 +13,7 @@ description: 使用 Engine 发布物运行 Lumio 游戏服务端，配置 Gamepl
 | 构建服务端、配表与保存验证 | [开发与验证](references/development.md) |
 | 查日志、进不了房或恢复失败 | [日志与排障](references/diagnostics.md) |
 | 写实体、同步、技能与每帧系统 | [共享玩法](../lumio-gameplay/SKILL.md) |
+| 用 TypeScript 引擎写服务端玩法（规则、系统、Bot、地图生成） | [代码写法](../lumio-development/references/code-style.md) |
 
 先按项目固定的 Engine 版本取得发布物，构建服务端玩法，再运行配置检查和启动器。出现 `DS_READY` 后核对准入和一次目标操作；保存验证应检查同一存储目录上的重启结果。
 
